@@ -7,11 +7,15 @@ const TOOLS: { id: Tool; label: string }[] = [
   { id: "placeObject", label: "Place object" },
 ];
 
+const SNAP_OPTIONS = [0.05, 0.1, 0.25, 0.5];
+
 export function Toolbar() {
   const tool = useEditorStore((s) => s.tool);
   const setTool = useEditorStore((s) => s.setTool);
   const ceilingVisible = useEditorStore((s) => s.ceilingVisible);
   const toggleCeiling = useEditorStore((s) => s.toggleCeiling);
+  const snapSize = useEditorStore((s) => s.snapSize);
+  const setSnapSize = useEditorStore((s) => s.setSnapSize);
 
   return (
     <header className="toolbar">
@@ -34,6 +38,20 @@ export function Toolbar() {
         ))}
       </div>
       <div className="toolbar-group">
+        <label className="toolbar-snap">
+          Snap
+          <select
+            value={snapSize}
+            onChange={(event) => setSnapSize(Number(event.target.value))}
+            title="Grid snapping for wall drags"
+          >
+            {SNAP_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option} m
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className={ceilingVisible ? "active" : ""}
           onClick={toggleCeiling}

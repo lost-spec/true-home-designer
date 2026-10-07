@@ -9,6 +9,11 @@ import { useEditorStore } from "./store/editorStore";
 export default function App() {
   const select = useEditorStore((s) => s.select);
 
+  const handlePointerMissed = () => {
+    if (useEditorStore.getState().draggingWallId) return;
+    select(null);
+  };
+
   return (
     <div className="app">
       <Toolbar />
@@ -19,7 +24,7 @@ export default function App() {
             shadows
             dpr={[1, 2]}
             camera={{ position: [9, 7, 9], fov: 50 }}
-            onPointerMissed={() => select(null)}
+            onPointerMissed={handlePointerMissed}
           >
             <Scene />
           </Canvas>

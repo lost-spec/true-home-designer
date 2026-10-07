@@ -1,0 +1,109 @@
+import { useEffect } from "react";
+import { useThree } from "@react-three/fiber";
+import * as THREE from "three";
+import { useHouseStore } from "./store/houseStore";
+import { useEditorStore } from "./store/editorStore";
+import {
+  clientToNdc,
+  groundHitFromClient,
+  projectToClient,
+} from "./interaction/pointerProjection";
+
+interface BoxBounds {
+  min: { x: number; y: number; z: number };
+  max: { x: number; y: number; z: number };
+}
+
+declare global {
+  interface Window {
+    __homeDesigner?: {
+      getHouse: () => unknown;
+      getSelection: () => unknown;
+      getSnapSize: () => number;
+      setSnapSize: (value: number) => void;
+      getDraggingWallId: () => string | null;
+      project: (x: number, y: number, z: number) => { x: number; y: number } | null;
+      groundAt: (clientX: number, clientY: number) => { x: number; z: number } | null;
+      measure: (name: string) => BoxBounds | null;
+      pickWall: (clientX: number, clientY: number) => string | null;
+      pickTop: (clientX: number, clientY: number) => string | null;
+    };
+  }
+}
+
+function ancestorName(object: THREE.Object3D): string | null {
+  let current: THREE.Object3D | null = object;
+  while (current) {
+    if (current.name) return current.name;
+    current = current.parent;
+  }
+  return null;
+}
+
+export function DevBridge() {
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
+  const internal = useThree((s) => s.internal);
+
+  useEffect(() => {
+    const raycaster = new THREE.Raycaster();
+    const box = new THREE.Box3();
+    const ndc = new THREE.Vector2();
+
+    const castInteractive = (clientX: number, clientY: number) => {
+      const point = clientToNdc(gl.domElement, clientX, clientY);
+      ndc.set(point.x, point.y);
+      raycaster.setFromCamera(ndc, camera);
+      const hits: THREE.Intersection[] = [];
+      for (const object of internal.interaction) {
+        hits.push(...raycaster.intersectObject(object, true));
+      }
+      hits.sort((a, b) => a.distance - b.distance);
+      return hits;
+    };
+
+    window.__homeDesigner = {
+      getHouse: () => useHouseStore.getState().house,
+      getSelection: () => useEditorStore.getState().selection,
+      getSnapSize: () => useEditorStore.getState().snapSize,
+      setSnapSize: (value) => useEditorStore.getState().setSnapSize(value),
+      getDraggingWallId: () => useEditorStore.getState().draggingWallId,
+      project: (x, y, z) => projectToClient(camera, gl.domElement, x, y, z),
+      groundAt: (clientX, clientY) =>
+        groundHitFromClient(camera, gl.domElement, clientX, clientY),
+      measure: (name) => {
+        const target = scene.getObjectByName(name);
+        if (!target) return null;
+        box.setFromObject(target);
+        if (box.isEmpty()) return null;
+        return {
+          min: { x: box.min.x, y: box.min.y, z: box.min.z },
+          max: { x: box.max.x, y: box.max.y, z: box.max.z },
+        };
+      },
+      pickWall: (clientX, clientY) => {
+        const hits = castInteractive(clientX, clientY);
+        if (!hits.length) return null;
+        const wallIds = Object.keys(useHouseStore.getState().house.walls);
+        let current: THREE.Object3D | null = hits[0].object;
+        while (current) {
+          if (current.name && wallIds.includes(current.name)) return current.name;
+          current = current.parent;
+        }
+        return null;
+      },
+      pickTop: (clientX, clientY) => {
+        const hits = castInteractive(clientX, clientY);
+        if (!hits.length) return null;
+        return ancestorName(hits[0].object);
+      },
+    };
+
+    return () => {
+      delete window.__homeDesigner;
+    };
+  }, [scene, camera, gl, internal]);
+
+  return null;
+}

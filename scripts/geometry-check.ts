@@ -2,12 +2,24 @@ import {
   createRoom,
   generateRoomWalls,
   roomWallId,
+  type RoomEdge,
 } from "../src/geometry/roomGeometry";
 import { getFloorBox } from "../src/geometry/floorGeometry";
 import { getCeilingBox } from "../src/geometry/ceilingGeometry";
 import { getWallBoxes, getWallPlacement } from "../src/geometry/wallGeometry";
 import { useHouseStore } from "../src/store/houseStore";
-import { CEILING_THICKNESS, FLOOR_THICKNESS } from "../src/types/house";
+import {
+  createWallDragAnchor,
+  edgeAxis,
+  findRoomEdgeForWall,
+  resolveWallDrag,
+  snapToGrid,
+} from "../src/interaction/wallInteraction";
+import {
+  CEILING_THICKNESS,
+  FLOOR_THICKNESS,
+  type House,
+} from "../src/types/house";
 
 let failures = 0;
 
@@ -161,6 +173,205 @@ check("depth clamped to maximum", updated.depth === 60);
 useHouseStore.getState().setRoomDimensions("room-1", { width: Number.NaN });
 house = useHouseStore.getState().house;
 check("NaN input ignored", house.rooms["room-1"].width === 1);
+
+check("snapToGrid rounds to 0.1 grid", approx(snapToGrid(4.37, 0.1), 4.4));
+check("snapToGrid rounds negative values", approx(snapToGrid(-3.83, 0.1), -3.8));
+check("snapToGrid supports coarse grids", approx(snapToGrid(3.72, 0.5), 3.5));
+check(
+  "snapToGrid leaves value when snap invalid",
+  snapToGrid(1.234, 0) === 1.234 && approx(snapToGrid(1.234, Number.NaN), 1.234),
+);
+check(
+  "edgeAxis classifies edges",
+  edgeAxis("east") === "x" &&
+    edgeAxis("west") === "x" &&
+    edgeAxis("north") === "z" &&
+    edgeAxis("south") === "z",
+);
+
+const fresh = createRoom({
+  id: "room-1",
+  name: "Room 1",
+  origin: { x: -3, z: -2.5 },
+  width: 6,
+  depth: 5,
+});
+const freshHouse: House = {
+  version: 1,
+  rooms: { "room-1": fresh.room },
+  walls: Object.fromEntries(fresh.walls.map((wall) => [wall.id, wall])),
+  openings: {},
+  objects: {},
+};
+useHouseStore.getState().replaceHouse(freshHouse);
+
+const storeState = () => useHouseStore.getState();
+const getRoom = () => storeState().house.rooms["room-1"];
+
+const rectOk = (house: House) => {
+  const r = house.rooms["room-1"];
+  const x0 = r.origin.x;
+  const z0 = r.origin.z;
+  const x1 = x0 + r.width;
+  const z1 = z0 + r.depth;
+  const wall = (edge: RoomEdge) => house.walls[roomWallId("room-1", edge)];
+  const s = wall("south");
+  const e = wall("east");
+  const n = wall("north");
+  const w = wall("west");
+  if (!s || !e || !n || !w) return false;
+  const eps = 1e-9;
+  const pt = (p: { x: number; z: number }, x: number, z: number) =>
+    Math.abs(p.x - x) < eps && Math.abs(p.z - z) < eps;
+  return (
+    pt(s.start, x0, z0) &&
+    pt(s.end, x1, z0) &&
+    pt(e.start, x1, z0) &&
+    pt(e.end, x1, z1) &&
+    pt(n.start, x1, z1) &&
+    pt(n.end, x0, z1) &&
+    pt(w.start, x0, z1) &&
+    pt(w.end, x0, z0) &&
+    approx(getWallPlacement(s).length, r.width) &&
+    approx(getWallPlacement(e).length, r.depth) &&
+    approx(getWallPlacement(n).length, r.width) &&
+    approx(getWallPlacement(w).length, r.depth)
+  );
+};
+
+check("reset house rectangle intact", rectOk(storeState().house));
+check(
+  "reset house has 4 walls",
+  Object.keys(storeState().house.walls).length === 4,
+);
+
+const eastTarget = findRoomEdgeForWall(
+  storeState().house,
+  roomWallId("room-1", "east"),
+);
+check(
+  "findRoomEdgeForWall resolves east wall",
+  eastTarget !== null && eastTarget.edge === "east" && eastTarget.roomId === "room-1",
+);
+const anchorEast = eastTarget
+  ? createWallDragAnchor(eastTarget, getRoom(), { x: 3.6, z: 0 })
+  : null;
+check(
+  "anchor captures edge coordinate and grab offset",
+  anchorEast !== null &&
+    anchorEast.axis === "x" &&
+    approx(anchorEast.edgeCoord, 3) &&
+    approx(anchorEast.grabOffset, -0.6),
+);
+check(
+  "resolveWallDrag applies snap",
+  anchorEast !== null && approx(resolveWallDrag(anchorEast, { x: 4.12, z: 123 }, 0.1), 3.5),
+);
+check(
+  "resolveWallDrag ignores non-finite ground",
+  anchorEast !== null &&
+    approx(resolveWallDrag(anchorEast, { x: Number.NaN, z: 0 }, 0.1), 3),
+);
+check(
+  "findRoomEdgeForWall rejects unknown wall",
+  findRoomEdgeForWall(storeState().house, "nope") === null,
+);
+const southTarget = findRoomEdgeForWall(
+  storeState().house,
+  roomWallId("room-1", "south"),
+);
+const anchorSouth = southTarget
+  ? createWallDragAnchor(southTarget, getRoom(), { x: 0, z: -2 })
+  : null;
+check(
+  "south anchor uses z axis",
+  anchorSouth !== null &&
+    anchorSouth.axis === "z" &&
+    approx(anchorSouth.edgeCoord, -2.5) &&
+    approx(anchorSouth.grabOffset, -0.5),
+);
+
+storeState().moveRoomEdge("room-1", "east", 4.4);
+let r = getRoom();
+check(
+  "east drag extends width, west edge fixed",
+  approx(r.width, 7.4) && approx(r.origin.x, -3),
+);
+check(
+  "east drag preserves depth and south edge",
+  approx(r.depth, 5) && approx(r.origin.z, -2.5),
+);
+check("east drag keeps rectangle integrity", rectOk(storeState().house));
+check(
+  "east drag regenerates all 4 walls",
+  Object.keys(storeState().house.walls).length === 4,
+);
+const floorAfterEast = getFloorBox(r);
+check(
+  "floor follows east drag",
+  approx(floorAfterEast.size[0], r.width) &&
+    approx(floorAfterEast.size[2], r.depth) &&
+    approx(floorAfterEast.position[0], r.origin.x + r.width / 2) &&
+    approx(floorAfterEast.position[2], r.origin.z + r.depth / 2),
+);
+const ceilingAfterEast = getCeilingBox(r);
+check(
+  "ceiling follows east drag",
+  approx(ceilingAfterEast.size[0], r.width) &&
+    approx(ceilingAfterEast.size[2], r.depth),
+);
+
+storeState().moveRoomEdge("room-1", "west", -3.83);
+r = getRoom();
+check(
+  "west drag moves west edge, east edge fixed",
+  approx(r.origin.x, -3.83) && approx(r.origin.x + r.width, 4.4),
+);
+check("west drag keeps rectangle integrity", rectOk(storeState().house));
+
+storeState().moveRoomEdge("room-1", "north", 3.72);
+r = getRoom();
+check(
+  "north drag extends depth, south edge fixed",
+  approx(r.origin.z, -2.5) && approx(r.origin.z + r.depth, 3.72),
+);
+check("north drag keeps rectangle integrity", rectOk(storeState().house));
+
+storeState().moveRoomEdge("room-1", "south", -3.43);
+r = getRoom();
+check(
+  "south drag moves south edge, north edge fixed",
+  approx(r.origin.z, -3.43) && approx(r.origin.z + r.depth, 3.72),
+);
+check("south drag keeps rectangle integrity", rectOk(storeState().house));
+check(
+  "floor matches room after all drags",
+  approx(getFloorBox(r).size[0], r.width) && approx(getFloorBox(r).size[2], r.depth),
+);
+
+const beforeNaN = JSON.stringify(storeState().house);
+storeState().moveRoomEdge("room-1", "east", Number.NaN);
+check("NaN world position ignored", JSON.stringify(storeState().house) === beforeNaN);
+
+storeState().moveRoomEdge("room-1", "east", 200);
+r = getRoom();
+check(
+  "east drag clamps width to maximum",
+  approx(r.width, 60) && approx(r.origin.x, -3.83),
+);
+check("max clamp keeps rectangle integrity", rectOk(storeState().house));
+
+storeState().moveRoomEdge("room-1", "east", -50);
+r = getRoom();
+check(
+  "east drag clamps width to minimum",
+  approx(r.width, 1) && approx(r.origin.x, -3.83),
+);
+check("min clamp keeps rectangle integrity", rectOk(storeState().house));
+check(
+  "walls NaN-free after drag sequence",
+  noNaN(Object.values(storeState().house.walls)),
+);
 
 console.log(failures === 0 ? "\nAll geometry checks passed." : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -17,10 +17,12 @@ export function FloorMesh({ roomId }: { roomId: string }) {
 
   return (
     <mesh
+      name="room-floor"
       position={box.position}
       receiveShadow
       onClick={(event) => {
         event.stopPropagation();
+        if (useEditorStore.getState().draggingWallId) return;
         select({ kind: "room", id: roomId });
       }}
     >

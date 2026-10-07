@@ -1,5 +1,6 @@
 import { Grid, OrbitControls } from "@react-three/drei";
 import { HouseScene } from "./HouseScene";
+import { DevBridge } from "../devBridge";
 
 const TARGET: [number, number, number] = [0, 1, 0];
 
@@ -27,6 +28,7 @@ export function Scene() {
         infiniteGrid
       />
       <HouseScene />
+      {import.meta.env.DEV ? <DevBridge /> : null}
       <OrbitControls
         makeDefault
         target={TARGET}

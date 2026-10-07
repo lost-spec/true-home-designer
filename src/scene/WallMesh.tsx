@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import { getOpeningFillBox, getWallBoxes, getWallPlacement } from "../geometry/wallGeometry";
+import { useWallDrag } from "../interaction/useWallDrag";
 
 const WALL_COLOR = "#e9e4dc";
 const WALL_SELECTED = "#5b9cff";
@@ -38,6 +39,8 @@ export function WallMesh({ wallId }: { wallId: string }) {
     [wall, openings],
   );
 
+  const { onPointerDown, onPointerOver, onPointerOut } = useWallDrag(wallId);
+
   const selectWall = (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
     select({ kind: "wall", id: wallId });
@@ -45,9 +48,13 @@ export function WallMesh({ wallId }: { wallId: string }) {
 
   return (
     <group
+      name={wallId}
       position={placement.position}
       rotation={[0, placement.rotationY, 0]}
       onClick={selectWall}
+      onPointerDown={onPointerDown}
+      onPointerOver={onPointerOver}
+      onPointerOut={onPointerOut}
     >
       {boxes.map((box, index) => (
         <mesh key={index} position={box.position} castShadow receiveShadow>
@@ -65,6 +72,7 @@ export function WallMesh({ wallId }: { wallId: string }) {
           castShadow
           onClick={(event) => {
             event.stopPropagation();
+            if (useEditorStore.getState().draggingWallId) return;
             select({ kind: "opening", id: opening.id });
           }}
         >

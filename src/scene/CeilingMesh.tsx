@@ -10,7 +10,7 @@ export function CeilingMesh({ roomId }: { roomId: string }) {
   const box = useMemo(() => getCeilingBox(room), [room]);
 
   return (
-    <mesh position={box.position} castShadow receiveShadow>
+    <mesh name="room-ceiling" position={box.position} castShadow receiveShadow>
       <boxGeometry args={box.size} />
       <meshStandardMaterial color={CEILING_COLOR} roughness={0.95} />
     </mesh>

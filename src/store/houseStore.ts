@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { House, PlacedObject, Room, Wall } from "../types/house";
-import { createRoom, generateRoomWalls } from "../geometry/roomGeometry";
+import { createRoom, generateRoomWalls, type RoomEdge } from "../geometry/roomGeometry";
 
 const MIN_ROOM_SIZE = 1;
 const MAX_ROOM_SIZE = 60;
@@ -11,6 +11,19 @@ const MAX_WALL_THICKNESS = 0.5;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function withUpdatedRoom(house: House, updated: Room): House {
+  const walls = generateRoomWalls(updated);
+  const nextWalls = { ...house.walls };
+  for (const wall of walls) {
+    nextWalls[wall.id] = wall;
+  }
+  return {
+    ...house,
+    rooms: { ...house.rooms, [updated.id]: updated },
+    walls: nextWalls,
+  };
 }
 
 const firstRoom = createRoom({
@@ -40,6 +53,7 @@ export interface HouseState {
   house: House;
   replaceHouse: (house: House) => void;
   setRoomDimensions: (roomId: string, patch: RoomDimensionsPatch) => void;
+  moveRoomEdge: (roomId: string, edge: RoomEdge, worldPosition: number) => void;
   updateWall: (id: string, patch: Partial<Omit<Wall, "id">>) => void;
   addPlacedObject: (object: PlacedObject) => void;
   updatePlacedObject: (
@@ -88,19 +102,44 @@ export const useHouseStore = create<HouseState>((set) => ({
         origin: { x: centerX - width / 2, z: centerZ - depth / 2 },
       };
 
-      const walls = generateRoomWalls(updated);
-      const nextWalls = { ...state.house.walls };
-      for (const wall of walls) {
-        nextWalls[wall.id] = wall;
+      return { house: withUpdatedRoom(state.house, updated) };
+    }),
+
+  moveRoomEdge: (roomId, edge, worldPosition) =>
+    set((state) => {
+      const room = state.house.rooms[roomId];
+      if (!room || !Number.isFinite(worldPosition)) return state;
+
+      const x0 = room.origin.x;
+      const z0 = room.origin.z;
+      const x1 = x0 + room.width;
+      const z1 = z0 + room.depth;
+
+      let width = room.width;
+      let depth = room.depth;
+      let originX = x0;
+      let originZ = z0;
+
+      if (edge === "east") {
+        width = clamp(worldPosition - x0, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
+      } else if (edge === "west") {
+        width = clamp(x1 - worldPosition, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
+        originX = x1 - width;
+      } else if (edge === "north") {
+        depth = clamp(worldPosition - z0, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
+      } else {
+        depth = clamp(z1 - worldPosition, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
+        originZ = z1 - depth;
       }
 
-      return {
-        house: {
-          ...state.house,
-          rooms: { ...state.house.rooms, [roomId]: updated },
-          walls: nextWalls,
-        },
+      const updated: Room = {
+        ...room,
+        width,
+        depth,
+        origin: { x: originX, z: originZ },
       };
+
+      return { house: withUpdatedRoom(state.house, updated) };
     }),
 
   updateWall: (id, patch) =>
