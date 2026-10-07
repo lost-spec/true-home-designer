@@ -1,12 +1,31 @@
 export type Vec2 = { x: number; z: number };
 
+export type RoomId = string;
+export type WallId = string;
+export type OpeningId = string;
+export type ObjectId = string;
+
 export const DEFAULT_WALL_HEIGHT = 2.7;
 export const DEFAULT_WALL_THICKNESS = 0.2;
 export const FLOOR_THICKNESS = 0.15;
 export const CEILING_THICKNESS = 0.12;
 
+export type RoomEdge = "south" | "east" | "north" | "west";
+
+export interface Room {
+  id: RoomId;
+  name: string;
+  position: Vec2;
+  width: number;
+  depth: number;
+  height: number;
+  wallThickness: number;
+}
+
 export interface Wall {
-  id: string;
+  id: WallId;
+  roomId: RoomId;
+  edge: RoomEdge;
   start: Vec2;
   end: Vec2;
   height: number;
@@ -16,8 +35,8 @@ export interface Wall {
 export type OpeningKind = "door" | "window";
 
 export interface Opening {
-  id: string;
-  wallId: string;
+  id: OpeningId;
+  wallId: WallId;
   kind: OpeningKind;
   offset: number;
   width: number;
@@ -25,30 +44,20 @@ export interface Opening {
   sillHeight: number;
 }
 
-export interface Room {
-  id: string;
-  name: string;
-  origin: Vec2;
-  width: number;
-  depth: number;
-  wallHeight: number;
-  wallThickness: number;
-  wallIds: string[];
-}
-
 export interface PlacedObject {
-  id: string;
+  id: ObjectId;
   assetId: string;
   position: Vec2;
   rotationY: number;
+  scale: number;
 }
 
 export interface House {
   version: 1;
-  rooms: Record<string, Room>;
-  walls: Record<string, Wall>;
-  openings: Record<string, Opening>;
-  objects: Record<string, PlacedObject>;
+  rooms: Record<RoomId, Room>;
+  walls: Record<WallId, Wall>;
+  openings: Record<OpeningId, Opening>;
+  objects: Record<ObjectId, PlacedObject>;
 }
 
 export function wallLength(wall: Wall): number {

@@ -17,6 +17,7 @@ export function PlacedObject({ objectId }: { objectId: string }) {
     <group
       position={[object.position.x, 0, object.position.z]}
       rotation={[0, object.rotationY, 0]}
+      scale={object.scale}
       onClick={(event) => {
         event.stopPropagation();
         select({ kind: "object", id: objectId });

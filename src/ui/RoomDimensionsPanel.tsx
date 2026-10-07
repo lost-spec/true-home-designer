@@ -12,7 +12,7 @@ interface DimensionField {
 const FIELDS: DimensionField[] = [
   { key: "width", label: "Width (m)", min: 1, max: 60, step: 0.1 },
   { key: "depth", label: "Depth (m)", min: 1, max: 60, step: 0.1 },
-  { key: "wallHeight", label: "Wall height (m)", min: 1.5, max: 6, step: 0.05 },
+  { key: "height", label: "Wall height (m)", min: 1.5, max: 6, step: 0.05 },
   {
     key: "wallThickness",
     label: "Wall thickness (m)",

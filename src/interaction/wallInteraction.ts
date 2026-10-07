@@ -1,5 +1,4 @@
-import type { House, Room } from "../types/house";
-import { roomWallId, type RoomEdge } from "../geometry/roomGeometry";
+import type { House, Room, RoomEdge } from "../types/house";
 
 export type EdgeAxis = "x" | "z";
 
@@ -21,31 +20,24 @@ export interface WallDragAnchor {
   grabOffset: number;
 }
 
-const ALL_EDGES: RoomEdge[] = ["south", "east", "north", "west"];
-
 export function edgeAxis(edge: RoomEdge): EdgeAxis {
   return edge === "east" || edge === "west" ? "x" : "z";
 }
 
 export function edgeCoordinate(room: Room, edge: RoomEdge): number {
-  if (edge === "east") return room.origin.x + room.width;
-  if (edge === "west") return room.origin.x;
-  if (edge === "north") return room.origin.z + room.depth;
-  return room.origin.z;
+  if (edge === "east") return room.position.x + room.width;
+  if (edge === "west") return room.position.x;
+  if (edge === "north") return room.position.z + room.depth;
+  return room.position.z;
 }
 
 export function findRoomEdgeForWall(
   house: House,
   wallId: string,
 ): RoomEdgeTarget | null {
-  for (const room of Object.values(house.rooms)) {
-    for (const edge of ALL_EDGES) {
-      if (roomWallId(room.id, edge) === wallId) {
-        return { roomId: room.id, edge };
-      }
-    }
-  }
-  return null;
+  const wall = house.walls[wallId];
+  if (!wall || !house.rooms[wall.roomId]) return null;
+  return { roomId: wall.roomId, edge: wall.edge };
 }
 
 export function createWallDragAnchor(

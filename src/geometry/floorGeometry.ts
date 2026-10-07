@@ -5,9 +5,9 @@ import type { BoxSpec } from "./wallGeometry";
 export function getFloorBox(room: Room): BoxSpec {
   return {
     position: [
-      room.origin.x + room.width / 2,
+      room.position.x + room.width / 2,
       -FLOOR_THICKNESS / 2,
-      room.origin.z + room.depth / 2,
+      room.position.z + room.depth / 2,
     ],
     size: [room.width, FLOOR_THICKNESS, room.depth],
   };

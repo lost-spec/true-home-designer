@@ -82,7 +82,13 @@ export function Inspector() {
           label="Area"
           value={`${(room.width * room.depth).toFixed(1)} m²`}
         />
-        <Row label="Walls" value={String(room.wallIds.length)} />
+        <Row
+          label="Walls"
+          value={String(
+            Object.values(house.walls).filter((wall) => wall.roomId === room.id)
+              .length,
+          )}
+        />
       </>
     );
   }
@@ -101,6 +107,7 @@ export function Inspector() {
         label="Rotation Y"
         value={`${((object.rotationY * 180) / Math.PI).toFixed(0)}°`}
       />
+      <Row label="Scale" value={`${object.scale.toFixed(2)}×`} />
     </>
   );
 }
