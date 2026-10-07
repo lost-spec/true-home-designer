@@ -138,7 +138,12 @@ check(
       Object.values(store.house.rooms["room-1"].edges).includes(wall.id),
     ),
 );
-check("sample house has no openings/objects", Object.keys(store.house.openings).length === 0 && Object.keys(store.house.objects).length === 0);
+check(
+  "sample house has no openings and only the test asset",
+  Object.keys(store.house.openings).length === 0 &&
+    Object.keys(store.house.objects).length === 1 &&
+    Object.values(store.house.objects)[0].assetId === "test_crate",
+);
 
 useHouseStore.getState().setRoomDimensions("room-1", { width: 10 });
 let house = useHouseStore.getState().house;

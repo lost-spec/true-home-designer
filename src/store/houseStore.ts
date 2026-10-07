@@ -72,7 +72,15 @@ const sampleHouse: House = {
   rooms: { [firstRoom.room.id]: firstRoom.room },
   walls: Object.fromEntries(firstRoom.walls.map((wall) => [wall.id, wall])),
   openings: {},
-  objects: {},
+  objects: {
+    "obj-test-crate": {
+      id: "obj-test-crate",
+      assetId: "test_crate",
+      position: { x: 2, z: 1.5 },
+      rotationY: 0,
+      scale: 1,
+    },
+  },
 };
 
 export interface RoomDimensionsPatch {

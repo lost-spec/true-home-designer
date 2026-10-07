@@ -142,6 +142,41 @@ expect(
   `warm=${stats["01-initial-ceiling-on"].warm}`,
 );
 
+const assetState = await page.evaluate(() => {
+  const api = window.__homeDesigner;
+  if (!api) return null;
+  const house = api.getHouse();
+  const objects = Object.values(house.objects);
+  const testObject = objects.find((o) => o.assetId === "test_crate");
+  return {
+    objectCount: objects.length,
+    hasTestCrate: Boolean(testObject),
+    bounds: testObject ? api.measure(`object-${testObject.id}`) : null,
+  };
+});
+expect("asset bridge available", assetState !== null, JSON.stringify(assetState));
+expect(
+  "sample house places the test asset",
+  assetState?.hasTestCrate === true,
+  JSON.stringify(assetState),
+);
+{
+  const b = assetState?.bounds;
+  const height = b ? b.max.y - b.min.y : Number.NaN;
+  const centerX = b ? (b.min.x + b.max.x) / 2 : Number.NaN;
+  const centerZ = b ? (b.min.z + b.max.z) / 2 : Number.NaN;
+  const minY = b ? b.min.y : Number.NaN;
+  expect(
+    "test asset GLB renders centered on floor (0.5m at 2.0,1.5)",
+    b != null &&
+      Math.abs(height - 0.5) < 0.02 &&
+      Math.abs(minY) < 0.02 &&
+      Math.abs(centerX - 2) < 0.02 &&
+      Math.abs(centerZ - 1.5) < 0.02,
+    JSON.stringify(b),
+  );
+}
+
 await clickButton("Hide ceiling");
 await shot("02-ceiling-off");
 expect(

@@ -1,7 +1,7 @@
-import { Clone, useGLTF } from "@react-three/drei";
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
-import { ASSET_BY_ID } from "../assets/catalog";
+import { assetRegistry } from "../assets/registry";
+import { AssetModel } from "./AssetModel";
 
 export function PlacedObject({ objectId }: { objectId: string }) {
   const object = useHouseStore((s) => s.house.objects[objectId]);
@@ -10,20 +10,22 @@ export function PlacedObject({ objectId }: { objectId: string }) {
     (s) => s.selection?.kind === "object" && s.selection.id === objectId,
   );
 
-  const asset = ASSET_BY_ID[object.assetId];
-  const { scene } = useGLTF(asset.path);
+  const asset = assetRegistry.get(object.assetId);
+  const allowRotation = asset?.allowRotation ?? true;
+  const allowScaling = asset?.allowScaling ?? true;
 
   return (
     <group
+      name={`object-${objectId}`}
       position={[object.position.x, 0, object.position.z]}
-      rotation={[0, object.rotationY, 0]}
-      scale={object.scale}
+      rotation={[0, allowRotation ? object.rotationY : 0, 0]}
+      scale={allowScaling ? object.scale : 1}
       onClick={(event) => {
         event.stopPropagation();
         select({ kind: "object", id: objectId });
       }}
     >
-      <Clone object={scene} castShadow receiveShadow />
+      <AssetModel assetId={object.assetId} />
       {isSelected && (
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.75, 0.9, 48]} />
