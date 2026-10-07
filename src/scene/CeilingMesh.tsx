@@ -6,9 +6,8 @@ const CEILING_COLOR = "#f2efe9";
 
 export function CeilingMesh({ roomId }: { roomId: string }) {
   const room = useHouseStore((s) => s.house.rooms[roomId]);
-  const walls = useHouseStore((s) => s.house.walls);
 
-  const box = useMemo(() => getCeilingBox(room, walls), [room, walls]);
+  const box = useMemo(() => getCeilingBox(room), [room]);
 
   return (
     <mesh position={box.position} castShadow receiveShadow>

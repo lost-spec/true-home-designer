@@ -21,7 +21,7 @@ export interface EditorState {
 export const useEditorStore = create<EditorState>((set) => ({
   tool: "select",
   selection: null,
-  ceilingVisible: false,
+  ceilingVisible: true,
   setTool: (tool) => set({ tool }),
   select: (selection) => set({ selection }),
   toggleCeiling: () =>

@@ -1,7 +1,7 @@
 import { Grid, OrbitControls } from "@react-three/drei";
 import { HouseScene } from "./HouseScene";
 
-const TARGET: [number, number, number] = [5, 0.9, 2.5];
+const TARGET: [number, number, number] = [0, 1, 0];
 
 export function Scene() {
   return (

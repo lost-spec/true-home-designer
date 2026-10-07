@@ -31,6 +31,8 @@ export interface Room {
   origin: Vec2;
   width: number;
   depth: number;
+  wallHeight: number;
+  wallThickness: number;
   wallIds: string[];
 }
 

@@ -1,136 +1,45 @@
 import { create } from "zustand";
-import type { House, PlacedObject, Wall } from "../types/house";
-import {
-  DEFAULT_WALL_HEIGHT,
-  DEFAULT_WALL_THICKNESS,
-} from "../types/house";
+import type { House, PlacedObject, Room, Wall } from "../types/house";
+import { createRoom, generateRoomWalls } from "../geometry/roomGeometry";
+
+const MIN_ROOM_SIZE = 1;
+const MAX_ROOM_SIZE = 60;
+const MIN_WALL_HEIGHT = 1.5;
+const MAX_WALL_HEIGHT = 6;
+const MIN_WALL_THICKNESS = 0.05;
+const MAX_WALL_THICKNESS = 0.5;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+const firstRoom = createRoom({
+  id: "room-1",
+  name: "Room 1",
+  origin: { x: -3, z: -2.5 },
+  width: 6,
+  depth: 5,
+});
 
 const sampleHouse: House = {
   version: 1,
-  rooms: {
-    living: {
-      id: "living",
-      name: "Living room",
-      origin: { x: 0, z: 0 },
-      width: 6,
-      depth: 5,
-      wallIds: ["w-south", "w-west", "w-partition", "w-north"],
-    },
-    bedroom: {
-      id: "bedroom",
-      name: "Bedroom",
-      origin: { x: 6, z: 0 },
-      width: 4,
-      depth: 5,
-      wallIds: ["w-south", "w-partition", "w-east", "w-north"],
-    },
-  },
-  walls: {
-    "w-south": {
-      id: "w-south",
-      start: { x: 0, z: 0 },
-      end: { x: 10, z: 0 },
-      height: DEFAULT_WALL_HEIGHT,
-      thickness: DEFAULT_WALL_THICKNESS,
-    },
-    "w-east": {
-      id: "w-east",
-      start: { x: 10, z: 0 },
-      end: { x: 10, z: 5 },
-      height: DEFAULT_WALL_HEIGHT,
-      thickness: DEFAULT_WALL_THICKNESS,
-    },
-    "w-north": {
-      id: "w-north",
-      start: { x: 10, z: 5 },
-      end: { x: 0, z: 5 },
-      height: DEFAULT_WALL_HEIGHT,
-      thickness: DEFAULT_WALL_THICKNESS,
-    },
-    "w-west": {
-      id: "w-west",
-      start: { x: 0, z: 5 },
-      end: { x: 0, z: 0 },
-      height: DEFAULT_WALL_HEIGHT,
-      thickness: DEFAULT_WALL_THICKNESS,
-    },
-    "w-partition": {
-      id: "w-partition",
-      start: { x: 6, z: 0 },
-      end: { x: 6, z: 5 },
-      height: DEFAULT_WALL_HEIGHT,
-      thickness: DEFAULT_WALL_THICKNESS,
-    },
-  },
-  openings: {
-    "o-entry": {
-      id: "o-entry",
-      wallId: "w-south",
-      kind: "door",
-      offset: 4.5,
-      width: 1,
-      height: 2.1,
-      sillHeight: 0,
-    },
-    "o-inner": {
-      id: "o-inner",
-      wallId: "w-partition",
-      kind: "door",
-      offset: 1.8,
-      width: 0.9,
-      height: 2.1,
-      sillHeight: 0,
-    },
-    "o-win-1": {
-      id: "o-win-1",
-      wallId: "w-north",
-      kind: "window",
-      offset: 1.5,
-      width: 1.5,
-      height: 1.4,
-      sillHeight: 0.9,
-    },
-    "o-win-2": {
-      id: "o-win-2",
-      wallId: "w-north",
-      kind: "window",
-      offset: 7.2,
-      width: 1.5,
-      height: 1.4,
-      sillHeight: 0.9,
-    },
-  },
-  objects: {
-    "obj-sofa": {
-      id: "obj-sofa",
-      assetId: "sofa",
-      position: { x: 2.6, z: 2.4 },
-      rotationY: Math.PI,
-    },
-    "obj-table": {
-      id: "obj-table",
-      assetId: "modern_table",
-      position: { x: 2.6, z: 4.0 },
-      rotationY: 0,
-    },
-    "obj-tv": {
-      id: "obj-tv",
-      assetId: "modern_tv",
-      position: { x: 0.4, z: 2.6 },
-      rotationY: Math.PI / 2,
-    },
-    "obj-bed": {
-      id: "obj-bed",
-      assetId: "bed",
-      position: { x: 8, z: 3.2 },
-      rotationY: Math.PI,
-    },
-  },
+  rooms: { [firstRoom.room.id]: firstRoom.room },
+  walls: Object.fromEntries(firstRoom.walls.map((wall) => [wall.id, wall])),
+  openings: {},
+  objects: {},
 };
+
+export interface RoomDimensionsPatch {
+  width?: number;
+  depth?: number;
+  wallHeight?: number;
+  wallThickness?: number;
+}
 
 export interface HouseState {
   house: House;
   replaceHouse: (house: House) => void;
+  setRoomDimensions: (roomId: string, patch: RoomDimensionsPatch) => void;
   updateWall: (id: string, patch: Partial<Omit<Wall, "id">>) => void;
   addPlacedObject: (object: PlacedObject) => void;
   updatePlacedObject: (
@@ -144,6 +53,55 @@ export const useHouseStore = create<HouseState>((set) => ({
   house: sampleHouse,
 
   replaceHouse: (house) => set({ house }),
+
+  setRoomDimensions: (roomId, patch) =>
+    set((state) => {
+      const room = state.house.rooms[roomId];
+      if (!room) return state;
+
+      const width =
+        patch.width !== undefined && Number.isFinite(patch.width)
+          ? clamp(patch.width, MIN_ROOM_SIZE, MAX_ROOM_SIZE)
+          : room.width;
+      const depth =
+        patch.depth !== undefined && Number.isFinite(patch.depth)
+          ? clamp(patch.depth, MIN_ROOM_SIZE, MAX_ROOM_SIZE)
+          : room.depth;
+      const wallHeight =
+        patch.wallHeight !== undefined && Number.isFinite(patch.wallHeight)
+          ? clamp(patch.wallHeight, MIN_WALL_HEIGHT, MAX_WALL_HEIGHT)
+          : room.wallHeight;
+      const wallThickness =
+        patch.wallThickness !== undefined && Number.isFinite(patch.wallThickness)
+          ? clamp(patch.wallThickness, MIN_WALL_THICKNESS, MAX_WALL_THICKNESS)
+          : room.wallThickness;
+
+      const centerX = room.origin.x + room.width / 2;
+      const centerZ = room.origin.z + room.depth / 2;
+
+      const updated: Room = {
+        ...room,
+        width,
+        depth,
+        wallHeight,
+        wallThickness,
+        origin: { x: centerX - width / 2, z: centerZ - depth / 2 },
+      };
+
+      const walls = generateRoomWalls(updated);
+      const nextWalls = { ...state.house.walls };
+      for (const wall of walls) {
+        nextWalls[wall.id] = wall;
+      }
+
+      return {
+        house: {
+          ...state.house,
+          rooms: { ...state.house.rooms, [roomId]: updated },
+          walls: nextWalls,
+        },
+      };
+    }),
 
   updateWall: (id, patch) =>
     set((state) => {
