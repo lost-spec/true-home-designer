@@ -83,7 +83,7 @@ const sampleHouse: House = {
     "obj-test-crate": {
       id: "obj-test-crate",
       assetId: "test_crate",
-      position: { x: 2, z: 1.5 },
+      position: { x: 2, y: 0, z: 1.5 },
       rotationY: 0,
       scale: 1,
     },
@@ -384,7 +384,7 @@ export const useHouseStore = create<HouseState>((set, get) => ({
     const object: PlacedObject = {
       id,
       assetId,
-      position: { x: position.x, z: position.z },
+      position: { x: position.x, y: 0, z: position.z },
       rotationY: normalizeAngle(rotationY),
       scale: 1,
     };

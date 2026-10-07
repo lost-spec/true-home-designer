@@ -76,6 +76,7 @@ const state = () =>
       wallsJson: JSON.stringify(house.walls),
       hint: Boolean(document.querySelector(".placement-hint")),
       previewBounds: api.measure("placement-preview"),
+      cameraDistance: api.getCameraDistance(),
     };
   });
 
@@ -476,12 +477,128 @@ expect(
   "inspector shows object transform metadata",
   inspector.includes("Object") &&
     inspector.includes("Can rotate") &&
-    inspector.includes("Can scale") &&
-    inspector.includes("Rotation Y"),
+    inspector.includes("Height") &&
+    inspector.includes("Rotation Y") &&
+    inspector.includes("Scale"),
+  inspector.slice(0, 240),
+);
+expect(
+  "inspector offers raise/lower and object zoom controls",
+  inspector.includes("Raise") &&
+    inspector.includes("Lower") &&
+    inspector.includes("Zoom +") &&
+    inspector.includes("Zoom −"),
   inspector.slice(0, 240),
 );
 
 await shot("03-object-selected");
+
+// --- Vertical height (PageUp / PageDown) ---
+const floorBounds = await bridge(
+  (name) => window.__homeDesigner.measure(name),
+  `object-${openId}`,
+);
+await page.keyboard.press("PageUp");
+await sleep(250);
+const raised = await state();
+expect(
+  "PageUp raises the selected object by one step",
+  approx(raised.objects[openId].position.y, 0.1, 1e-9),
+  String(raised?.objects[openId]?.position?.y),
+);
+const raisedBounds = await bridge(
+  (name) => window.__homeDesigner.measure(name),
+  `object-${openId}`,
+);
+expect(
+  "raised mesh lifts off the floor",
+  floorBounds !== null &&
+    raisedBounds !== null &&
+    approx(raisedBounds.max.y - floorBounds.max.y, 0.1, 0.03),
+  JSON.stringify({ floorBounds, raisedBounds }),
+);
+await page.keyboard.press("PageDown");
+await sleep(250);
+const lowered = await state();
+const loweredBounds = await bridge(
+  (name) => window.__homeDesigner.measure(name),
+  `object-${openId}`,
+);
+expect(
+  "PageDown returns the object to the floor",
+  approx(lowered.objects[openId].position.y, 0, 1e-9) &&
+    loweredBounds !== null &&
+    Math.abs(loweredBounds.min.y) < 0.02,
+  JSON.stringify({ y: lowered?.objects[openId]?.position?.y, bounds: loweredBounds }),
+);
+
+// --- Object zoom (inspector buttons, multiply the model scale) ---
+await clickUiButton("Zoom +");
+const zoomedIn = await state();
+const zoomedInBounds = await bridge(
+  (name) => window.__homeDesigner.measure(name),
+  `object-${openId}`,
+);
+expect(
+  "Zoom + grows the selected object's scale",
+  approx(zoomedIn.objects[openId].scale, 1.1, 1e-3),
+  String(zoomedIn?.objects[openId]?.scale),
+);
+expect(
+  "zooming the object scales its mesh, not the floor",
+  zoomedInBounds !== null &&
+    Math.abs(zoomedInBounds.max.y - zoomedInBounds.min.y - 0.55) < 0.03 &&
+    Math.abs(zoomedInBounds.min.y) < 0.02,
+  JSON.stringify(zoomedInBounds),
+);
+await clickUiButton("Zoom −");
+const zoomedOut = await state();
+expect(
+  "Zoom − restores the object's scale",
+  approx(zoomedOut.objects[openId].scale, 1, 1e-3),
+  String(zoomedOut?.objects[openId]?.scale),
+);
+
+// --- Camera view zoom (toolbar buttons and +/- keys) ---
+const distanceStart = (await state()).cameraDistance;
+await clickUiButton("Zoom in");
+const afterZoomIn = await state();
+expect(
+  "the Zoom in button moves the camera closer",
+  afterZoomIn.cameraDistance < distanceStart - 0.1,
+  `${distanceStart} -> ${afterZoomIn.cameraDistance}`,
+);
+await clickUiButton("Zoom out");
+const afterZoomOut = await state();
+expect(
+  "the Zoom out button moves the camera back out",
+  afterZoomOut.cameraDistance > afterZoomIn.cameraDistance + 0.1,
+  `${afterZoomIn.cameraDistance} -> ${afterZoomOut.cameraDistance}`,
+);
+await page.keyboard.press("=");
+await sleep(250);
+const afterKeyIn = await state();
+expect(
+  "the + key zooms the view in",
+  afterKeyIn.cameraDistance < afterZoomOut.cameraDistance - 0.1,
+  `${afterZoomOut.cameraDistance} -> ${afterKeyIn.cameraDistance}`,
+);
+await page.keyboard.press("-");
+await sleep(250);
+const afterKeyOut = await state();
+expect(
+  "the - key zooms the view back out",
+  afterKeyOut.cameraDistance > afterKeyIn.cameraDistance + 0.1,
+  `${afterKeyIn.cameraDistance} -> ${afterKeyOut.cameraDistance}`,
+);
+expect(
+  "view zoom never moves the object or walls",
+  approx(afterKeyOut.objects[openId].position.x, zoomedOut.objects[openId].position.x, 1e-9) &&
+    approx(afterKeyOut.objects[openId].scale, 1, 1e-3) &&
+    afterKeyOut.roomsJson === geometryBefore.rooms &&
+    afterKeyOut.wallsJson === geometryBefore.walls,
+  JSON.stringify({ object: afterKeyOut.objects[openId], camera: afterKeyOut.cameraDistance }),
+);
 
 await page.keyboard.press("Delete");
 await sleep(300);

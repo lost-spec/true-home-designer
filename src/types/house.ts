@@ -1,4 +1,5 @@
 export type Vec2 = { x: number; z: number };
+export type Vec3 = { x: number; y: number; z: number };
 
 export type RoomId = string;
 export type WallId = string;
@@ -46,7 +47,7 @@ export interface Opening {
 export interface PlacedObject {
   id: ObjectId;
   assetId: string;
-  position: Vec2;
+  position: Vec3;
   rotationY: number;
   scale: number;
 }

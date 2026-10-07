@@ -13,7 +13,6 @@ export function PlacedObject({ objectId }: { objectId: string }) {
 
   const asset = assetRegistry.get(object.assetId);
   const allowRotation = asset?.allowRotation ?? true;
-  const allowScaling = asset?.allowScaling ?? true;
 
   const { onPointerDown, onPointerOver, onPointerOut } =
     useObjectDrag(objectId);
@@ -25,9 +24,9 @@ export function PlacedObject({ objectId }: { objectId: string }) {
   return (
     <group
       name={`object-${objectId}`}
-      position={[object.position.x, 0, object.position.z]}
+      position={[object.position.x, object.position.y, object.position.z]}
       rotation={[0, allowRotation ? object.rotationY : 0, 0]}
-      scale={allowScaling ? object.scale : 1}
+      scale={object.scale}
       onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
@@ -41,7 +40,10 @@ export function PlacedObject({ objectId }: { objectId: string }) {
     >
       <AssetModel assetId={object.assetId} />
       {isSelected && (
-        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh
+          position={[0, 0.02 - object.position.y, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
           <ringGeometry args={[ringRadius, ringRadius + 0.15, 48]} />
           <meshBasicMaterial color="#5b9cff" transparent opacity={0.9} />
         </mesh>

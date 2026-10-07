@@ -101,9 +101,9 @@ export function useObjectDrag(objectId: string) {
         if (!ground) return;
         const snapSize = useEditorStore.getState().snapSize;
         const position = resolveObjectMove(ground, grabOffset, snapSize);
-        useHouseStore
-          .getState()
-          .updatePlacedObject(objectId, { position });
+        useHouseStore.getState().updatePlacedObject(objectId, {
+          position: { x: position.x, y: object.position.y, z: position.z },
+        });
       };
 
       window.addEventListener("pointermove", handleMove);

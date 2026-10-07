@@ -1,6 +1,7 @@
 import { useEditorStore, type Tool } from "../store/editorStore";
 import { useHouseStore } from "../store/houseStore";
 import { firstWallUser } from "../geometry/roomGeometry";
+import { zoomCamera } from "../interaction/cameraZoom";
 import type { RoomId } from "../types/house";
 
 const TOOLS: { id: Tool; label: string }[] = [
@@ -99,6 +100,14 @@ export function Toolbar() {
           title="Toggle ceiling visibility"
         >
           {ceilingVisible ? "Hide ceiling" : "Show ceiling"}
+        </button>
+      </div>
+      <div className="toolbar-group">
+        <button onClick={() => zoomCamera(1)} title="Zoom the view in ( + )">
+          Zoom in
+        </button>
+        <button onClick={() => zoomCamera(-1)} title="Zoom the view out ( − )">
+          Zoom out
         </button>
       </div>
     </header>

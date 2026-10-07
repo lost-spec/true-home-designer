@@ -30,6 +30,7 @@ declare global {
       project: (x: number, y: number, z: number) => { x: number; y: number } | null;
       groundAt: (clientX: number, clientY: number) => { x: number; z: number } | null;
       measure: (name: string) => BoxBounds | null;
+      getCameraDistance: () => number;
       pickWall: (clientX: number, clientY: number) => string | null;
       pickTop: (clientX: number, clientY: number) => string | null;
       pickObject: (clientX: number, clientY: number) => string | null;
@@ -51,6 +52,9 @@ export function DevBridge() {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const internal = useThree((s) => s.internal);
+  const controls = useThree((s) => s.controls) as unknown as {
+    target: THREE.Vector3;
+  } | null;
 
   useEffect(() => {
     const raycaster = new THREE.Raycaster();
@@ -93,6 +97,8 @@ export function DevBridge() {
           max: { x: box.max.x, y: box.max.y, z: box.max.z },
         };
       },
+      getCameraDistance: () =>
+        camera.position.distanceTo(controls?.target ?? new THREE.Vector3()),
       pickWall: (clientX, clientY) => {
         const hits = castInteractive(clientX, clientY);
         if (!hits.length) return null;
@@ -126,7 +132,7 @@ export function DevBridge() {
     return () => {
       delete window.__homeDesigner;
     };
-  }, [scene, camera, gl, internal]);
+  }, [scene, camera, gl, internal, controls]);
 
   return null;
 }

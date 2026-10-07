@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { useEditorStore } from "../store/editorStore";
 import { useHouseStore } from "../store/houseStore";
 import { assetRegistry } from "../assets/registry";
-import { rotateObjectY } from "./objectInteraction";
+import { rotateObjectY, stepObjectElevation } from "./objectInteraction";
+import { zoomCamera } from "./cameraZoom";
 import { cancelActiveObjectDrag } from "./useObjectDrag";
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -65,6 +66,41 @@ export function useEditorHotkeys() {
           });
           event.preventDefault();
         }
+        return;
+      }
+
+      if (event.key === "PageUp" || event.key === "PageDown") {
+        const selection = editor.selection;
+        if (selection?.kind !== "object") return;
+        const store = useHouseStore.getState();
+        const object = store.house.objects[selection.id];
+        if (!object) return;
+        const direction = event.key === "PageUp" ? 1 : -1;
+        store.updatePlacedObject(object.id, {
+          position: {
+            ...object.position,
+            y: stepObjectElevation(object.position.y, direction),
+          },
+        });
+        event.preventDefault();
+        return;
+      }
+
+      if (
+        event.key === "+" ||
+        event.key === "=" ||
+        event.code === "NumpadAdd"
+      ) {
+        if (zoomCamera(1)) event.preventDefault();
+        return;
+      }
+
+      if (
+        event.key === "-" ||
+        event.key === "_" ||
+        event.code === "NumpadSubtract"
+      ) {
+        if (zoomCamera(-1)) event.preventDefault();
         return;
       }
 

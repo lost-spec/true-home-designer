@@ -3,6 +3,7 @@ import { Grid, OrbitControls } from "@react-three/drei";
 import { HouseScene } from "./HouseScene";
 import { PlacementController } from "./PlacementController";
 import { PlacementPreview } from "./PlacementPreview";
+import { CameraZoomBridge } from "./CameraZoomBridge";
 import { DevBridge } from "../devBridge";
 
 const TARGET: [number, number, number] = [0, 1, 0];
@@ -38,7 +39,7 @@ export function Scene() {
         <PlacementPreview />
       </Suspense>
       {import.meta.env.DEV ? <DevBridge /> : null}
-      <OrbitControls
+<OrbitControls
         makeDefault
         target={TARGET}
         enableDamping
@@ -47,6 +48,7 @@ export function Scene() {
         minDistance={2}
         maxDistance={60}
       />
+      <CameraZoomBridge />
     </>
   );
 }

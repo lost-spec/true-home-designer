@@ -8,6 +8,14 @@ import {
   rotateObjectY,
   ROTATE_STEP,
   snapObjectPosition,
+  stepObjectElevation,
+  zoomObjectScale,
+  ELEVATION_STEP,
+  MAX_OBJECT_ELEVATION,
+  MIN_OBJECT_ELEVATION,
+  MIN_OBJECT_SCALE,
+  MAX_OBJECT_SCALE,
+  ZOOM_STEP,
 } from "../src/interaction/objectInteraction";
 import { useHouseStore, nextObjectId } from "../src/store/houseStore";
 import { useEditorStore } from "../src/store/editorStore";
@@ -80,6 +88,21 @@ check("rotateObjectY ignores rotation when metadata forbids it", (() => {
   return approx(rotateObjectY(before, 1, false), before);
 })());
 
+check("ELEVATION_STEP is a sensible increment", approx(ELEVATION_STEP, 0.1));
+check("stepObjectElevation raises and lowers by one step", (() => {
+  return approx(stepObjectElevation(0, 1), ELEVATION_STEP) && approx(stepObjectElevation(1, -1), 0.9);
+})());
+check("stepObjectElevation snaps accumulated float drift", approx(stepObjectElevation(0.3, 1), 0.4));
+check("stepObjectElevation never falls below the floor", approx(stepObjectElevation(MIN_OBJECT_ELEVATION, -1), MIN_OBJECT_ELEVATION));
+check("stepObjectElevation caps at the maximum height", approx(stepObjectElevation(MAX_OBJECT_ELEVATION, 1), MAX_OBJECT_ELEVATION));
+check("stepObjectElevation recovers from non-finite input", approx(stepObjectElevation(Number.NaN, 1), MIN_OBJECT_ELEVATION));
+
+check("zoomObjectScale grows by the zoom factor", approx(zoomObjectScale(1, 1), ZOOM_STEP, 1e-3));
+check("zoomObjectScale shrinks by the zoom factor", approx(zoomObjectScale(1, -1), 1 / ZOOM_STEP, 1e-3));
+check("zoomObjectScale clamps to the maximum", approx(zoomObjectScale(MAX_OBJECT_SCALE, 1), MAX_OBJECT_SCALE));
+check("zoomObjectScale clamps to the minimum", approx(zoomObjectScale(MIN_OBJECT_SCALE, -1), MIN_OBJECT_SCALE));
+check("zoomObjectScale recovers from a non-positive scale", approx(zoomObjectScale(0, 1), 1));
+
 check("isPlacementActive requires both tool and asset", (() => {
   const placing = { tool: "placeObject", placingAssetId: "sofa" };
   const idle = { tool: "placeObject", placingAssetId: null };
@@ -115,6 +138,7 @@ check("createPlacedObject stores the requested position", (() => {
   const object = house().objects[first];
   return object !== undefined && approx(object.position.x, 1.26) && approx(object.position.z, -0.94);
 })());
+check("createPlacedObject rests objects on the floor", approx(house().objects[first].position.y, 0));
 check("createPlacedObject defaults rotation to zero", approx(house().objects[first].rotationY, 0));
 check("createPlacedObject normalises rotation", (() => {
   const id = model().createPlacedObject("sofa", { x: 0, z: 0 }, 3 * Math.PI);
@@ -126,10 +150,14 @@ const wallsBefore = JSON.stringify(house().walls);
 const roomsBefore = JSON.stringify(house().rooms);
 check("placing an object never mutates rooms or walls", JSON.stringify(house().walls) === wallsBefore && JSON.stringify(house().rooms) === roomsBefore);
 
-model().updatePlacedObject(first, { position: { x: 0.1, z: 0.1 }, rotationY: Math.PI / 4 });
+model().updatePlacedObject(first, { position: { x: 0.1, y: 0, z: 0.1 }, rotationY: Math.PI / 4 });
 check("updatePlacedObject patches position and rotation", (() => {
   const object = house().objects[first];
-  return approx(object.position.x, 0.1) && approx(object.position.z, 0.1) && approx(object.rotationY, Math.PI / 4);
+  return approx(object.position.x, 0.1) && approx(object.position.y, 0) && approx(object.position.z, 0.1) && approx(object.rotationY, Math.PI / 4);
+})());
+check("updatePlacedObject can raise an object off the floor", (() => {
+  model().updatePlacedObject(first, { position: { x: 0.1, y: 1.2, z: 0.1 } });
+  return approx(house().objects[first].position.y, 1.2);
 })());
 
 const expectedNext = nextObjectId(house());
@@ -143,6 +171,7 @@ check("house with objects survives a JSON round trip", JSON.stringify(roundTripp
 check("object entries expose only serialisable fields", serializableKeys(house()));
 check("placed objects contain only finite numbers", Object.values(house().objects).every((object) =>
   Number.isFinite(object.position.x) &&
+  Number.isFinite(object.position.y) &&
   Number.isFinite(object.position.z) &&
   Number.isFinite(object.rotationY) &&
   Number.isFinite(object.scale),
