@@ -1,4 +1,5 @@
 import type { House, Room, RoomEdge } from "../types/house";
+import { firstWallUser } from "../geometry/roomGeometry";
 
 export type EdgeAxis = "x" | "z";
 
@@ -35,9 +36,9 @@ export function findRoomEdgeForWall(
   house: House,
   wallId: string,
 ): RoomEdgeTarget | null {
-  const wall = house.walls[wallId];
-  if (!wall || !house.rooms[wall.roomId]) return null;
-  return { roomId: wall.roomId, edge: wall.edge };
+  const user = firstWallUser(house, wallId);
+  if (!user) return null;
+  return { roomId: user.roomId, edge: user.edge };
 }
 
 export function createWallDragAnchor(

@@ -1,6 +1,7 @@
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import { wallLength } from "../types/house";
+import { wallUsers } from "../geometry/roomGeometry";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -33,12 +34,17 @@ export function Inspector() {
     const openingCount = Object.values(house.openings).filter(
       (o) => o.wallId === wall.id,
     ).length;
+    const users = wallUsers(house, wall.id);
+    const roomNames = users
+      .map((user) => house.rooms[user.roomId]?.name ?? user.roomId)
+      .join(", ");
     return (
       <>
         <h2>Wall</h2>
         <Row label="Length" value={metres(wallLength(wall))} />
         <Row label="Height" value={metres(wall.height)} />
         <Row label="Thickness" value={metres(wall.thickness)} />
+        <Row label="Rooms" value={roomNames || "None"} />
         <Row label="Openings" value={String(openingCount)} />
         <Row
           label="Start"
@@ -72,6 +78,9 @@ export function Inspector() {
   if (selection.kind === "room") {
     const room = house.rooms[selection.id];
     if (!room) return null;
+    const sharedCount = Object.values(room.edges).filter(
+      (wallId) => wallUsers(house, wallId).length > 1,
+    ).length;
     return (
       <>
         <h2>Room</h2>
@@ -82,13 +91,8 @@ export function Inspector() {
           label="Area"
           value={`${(room.width * room.depth).toFixed(1)} m²`}
         />
-        <Row
-          label="Walls"
-          value={String(
-            Object.values(house.walls).filter((wall) => wall.roomId === room.id)
-              .length,
-          )}
-        />
+        <Row label="Walls" value={String(Object.keys(room.edges).length)} />
+        <Row label="Shared walls" value={String(sharedCount)} />
       </>
     );
   }

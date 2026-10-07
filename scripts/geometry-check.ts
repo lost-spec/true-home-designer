@@ -1,7 +1,12 @@
 import {
+  ROOM_EDGES,
   createRoom,
+  edgeSpan,
+  reconcile,
   roomWallId,
   roomWallIds,
+  wallSpan,
+  wallUsers,
   type RoomEdge,
 } from "../src/geometry/roomGeometry";
 import { getFloorBox } from "../src/geometry/floorGeometry";
@@ -125,10 +130,13 @@ check(
     Object.keys(store.house.walls).length === 4,
 );
 check(
-  "every sample wall carries roomId and edge",
-  Object.values(store.house.walls).every(
-    (wall) => wall.roomId === "room-1" && wall.edge.length > 0,
-  ),
+  "every sample wall is referenced by room edges",
+  Object.values(store.house.rooms["room-1"].edges).every(
+    (id) => store.house.walls[id] !== undefined,
+  ) &&
+    Object.values(store.house.walls).every((wall) =>
+      Object.values(store.house.rooms["room-1"].edges).includes(wall.id),
+    ),
 );
 check("sample house has no openings/objects", Object.keys(store.house.openings).length === 0 && Object.keys(store.house.objects).length === 0);
 
@@ -408,10 +416,13 @@ check(
   Object.keys(h.walls).length === 8,
 );
 check(
-  "new room walls carry ownership",
+  "new room walls are owned by the new room",
   roomWallIds(addedId).every((id) => {
     const wall = h.walls[id];
-    return wall !== undefined && wall.roomId === addedId;
+    return (
+      wall !== undefined &&
+      wallUsers(h, id).some((user) => user.roomId === addedId)
+    );
   }),
 );
 check(
@@ -558,7 +569,7 @@ check(
 check(
   "removeRoom deletes its walls only",
   Object.keys(h.walls).length === 4 &&
-    Object.values(h.walls).every((wall) => wall.roomId === "room-1"),
+    roomWallIds("room-1").every((id) => h.walls[id] !== undefined),
 );
 check(
   "removeRoom deletes openings on its walls",
@@ -575,6 +586,160 @@ check(
   "house stays consistent after cleanup",
   roomWallIds("room-1").every((id) => h.walls[id] !== undefined) &&
     noNaN(Object.values(h.walls)),
+);
+
+const noDuplicateOverlaps = (target: House): boolean => {
+  const walls = Object.values(target.walls);
+  for (let i = 0; i < walls.length; i += 1) {
+    for (let j = i + 1; j < walls.length; j += 1) {
+      const a = wallSpan(walls[i]);
+      const b = wallSpan(walls[j]);
+      if (!a || !b) continue;
+      if (a.run !== b.run || Math.abs(a.coord - b.coord) > 1e-6) continue;
+      if (Math.min(a.to, b.to) - Math.max(a.from, b.from) > 1e-6) return false;
+    }
+  }
+  return true;
+};
+
+const coverageOk = (target: House, roomId: string): boolean => {
+  const r = target.rooms[roomId];
+  if (!r) return false;
+  for (const edge of ROOM_EDGES) {
+    const wall = target.walls[r.edges[edge]];
+    if (!wall) return false;
+    const wallLine = wallSpan(wall);
+    const edgeLine = edgeSpan(r, edge);
+    if (
+      !wallLine ||
+      wallLine.run !== edgeLine.run ||
+      Math.abs(wallLine.coord - edgeLine.coord) > 1e-6
+    ) {
+      return false;
+    }
+    if (wallLine.from - 1e-6 > edgeLine.from || wallLine.to + 1e-6 < edgeLine.to) {
+      return false;
+    }
+  }
+  return true;
+};
+
+useHouseStore.getState().replaceHouse(freshHouse);
+const shared = model().addRoom({ width: 4, depth: 4 });
+h = houseNow();
+const sharedId = roomWallId("room-1", "east");
+
+check(
+  "flush addRoom places rooms side by side",
+  approx(h.rooms[shared].position.x, 3) &&
+    approx(h.rooms[shared].position.z, -2),
+);
+check("flush rooms share one wall (7 total)", Object.keys(h.walls).length === 7);
+check(
+  "shared wall id assigned to both rooms",
+  h.rooms["room-1"].edges.east === sharedId &&
+    h.rooms[shared].edges.west === sharedId &&
+    h.walls[sharedId] !== undefined,
+);
+check("shared wall has two users", wallUsers(h, sharedId).length === 2);
+check(
+  "no duplicate overlapping walls after flush add",
+  noDuplicateOverlaps(h),
+);
+
+model().moveRoomEdge(shared, "west", 4);
+h = houseNow();
+check(
+  "dragging shared wall resizes both rooms",
+  approx(h.rooms["room-1"].width, 7) && approx(h.rooms[shared].width, 3),
+);
+check("shared wall drag keeps 7 walls", Object.keys(h.walls).length === 7);
+check(
+  "shared wall id stable through drag",
+  h.rooms["room-1"].edges.east === sharedId &&
+    h.rooms[shared].edges.west === sharedId,
+);
+check("shared wall still has two users", wallUsers(h, sharedId).length === 2);
+check(
+  "both rooms rectangle-consistent after shared drag",
+  coverageOk(h, "room-1") && coverageOk(h, shared),
+);
+check(
+  "no duplicate overlapping walls after shared drag",
+  noDuplicateOverlaps(h),
+);
+
+const sharedDoor = model().addOpening({
+  wallId: sharedId,
+  kind: "door",
+  offset: 0.5,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+check("door added to shared wall", sharedDoor !== null);
+
+model().removeRoom(shared);
+h = houseNow();
+check(
+  "removing neighbor keeps shared wall for remaining room",
+  Object.keys(h.walls).length === 4 &&
+    h.rooms["room-1"].edges.east === sharedId &&
+    h.walls[sharedId] !== undefined,
+);
+check(
+  "door on shared wall survives neighbor removal",
+  sharedDoor !== null &&
+    h.openings[sharedDoor] !== undefined &&
+    h.openings[sharedDoor].wallId === sharedId,
+);
+check(
+  "no duplicate overlapping walls after removal",
+  noDuplicateOverlaps(h),
+);
+
+useHouseStore.getState().replaceHouse(freshHouse);
+const moved = model().addRoom({ width: 4, depth: 4 });
+model().setRoomPosition(moved, 20, 20);
+h = houseNow();
+check(
+  "setRoomPosition detaches a room into open space",
+  Object.keys(h.walls).length === 8 &&
+    approx(h.rooms[moved].position.x, 20) &&
+    approx(h.rooms[moved].position.z, 20),
+);
+check(
+  "detach gives the moved room its own walls",
+  h.rooms[moved].edges.west === roomWallId(moved, "west") &&
+    h.walls[roomWallId(moved, "west")] !== undefined,
+);
+check(
+  "detach keeps the stationary room's wall id",
+  h.rooms["room-1"].edges.east === roomWallId("room-1", "east"),
+);
+check(
+  "both rooms rectangle-consistent after detach",
+  coverageOk(h, "room-1") && coverageOk(h, moved),
+);
+check("no duplicate overlapping walls after detach", noDuplicateOverlaps(h));
+check(
+  "reconcile is idempotent",
+  JSON.stringify(reconcile(h)) === JSON.stringify(h),
+);
+
+useHouseStore.getState().replaceHouse(freshHouse);
+const split = model().addRoom({ width: 4, depth: 4 });
+model().moveRoomEdge(split, "west", -50);
+h = houseNow();
+check(
+  "extreme shared drag detaches cleanly",
+  Object.keys(h.walls).length === 8 &&
+    approx(h.rooms["room-1"].width, 1) &&
+    noDuplicateOverlaps(h),
+);
+check(
+  "extreme drag keeps both rooms rectangle-consistent",
+  coverageOk(h, "room-1") && coverageOk(h, split),
 );
 
 console.log(failures === 0 ? "\nAll geometry checks passed." : `\n${failures} check(s) FAILED.`);

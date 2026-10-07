@@ -6,7 +6,6 @@ import type {
   OpeningId,
   OpeningKind,
   PlacedObject,
-  Room,
   RoomEdge,
   RoomId,
   WallId,
@@ -16,14 +15,16 @@ import {
   DEFAULT_WALL_THICKNESS,
 } from "../types/house";
 import {
+  MIN_ROOM_SIZE,
+  MAX_ROOM_SIZE,
   createRoom,
-  generateRoomWalls,
+  moveRoomEdgeRect,
+  reconcile,
+  wallUsers,
   type RoomSpec,
 } from "../geometry/roomGeometry";
 import { getWallPlacement } from "../geometry/wallGeometry";
 
-const MIN_ROOM_SIZE = 1;
-const MAX_ROOM_SIZE = 60;
 const MIN_WALL_HEIGHT = 1.5;
 const MAX_WALL_HEIGHT = 6;
 const MIN_WALL_THICKNESS = 0.05;
@@ -44,19 +45,6 @@ function clampOr(
   return value !== undefined && Number.isFinite(value)
     ? clamp(value, min, max)
     : fallback;
-}
-
-function withUpdatedRoom(house: House, updated: Room): House {
-  const walls = generateRoomWalls(updated);
-  const nextWalls = { ...house.walls };
-  for (const wall of walls) {
-    nextWalls[wall.id] = wall;
-  }
-  return {
-    ...house,
-    rooms: { ...house.rooms, [updated.id]: updated },
-    walls: nextWalls,
-  };
 }
 
 function nextRoomId(house: House): RoomId {
@@ -94,6 +82,10 @@ export interface RoomDimensionsPatch {
   wallThickness?: number;
 }
 
+export interface AddRoomSpec extends Partial<RoomSpec> {
+  relativeTo?: RoomId;
+}
+
 export interface OpeningSpec {
   id?: OpeningId;
   wallId: WallId;
@@ -108,8 +100,9 @@ export interface HouseState {
   house: House;
   replaceHouse: (house: House) => void;
   setRoomDimensions: (roomId: RoomId, patch: RoomDimensionsPatch) => void;
+  setRoomPosition: (roomId: RoomId, x: number, z: number) => void;
   moveRoomEdge: (roomId: RoomId, edge: RoomEdge, worldPosition: number) => void;
-  addRoom: (spec?: Partial<RoomSpec>) => RoomId;
+  addRoom: (spec?: AddRoomSpec) => RoomId;
   removeRoom: (roomId: RoomId) => void;
   addOpening: (spec: OpeningSpec) => OpeningId | null;
   removeOpening: (openingId: OpeningId) => void;
@@ -151,7 +144,7 @@ export const useHouseStore = create<HouseState>((set, get) => ({
       const centerX = room.position.x + room.width / 2;
       const centerZ = room.position.z + room.depth / 2;
 
-      const updated: Room = {
+      const updated = {
         ...room,
         width,
         depth,
@@ -160,7 +153,27 @@ export const useHouseStore = create<HouseState>((set, get) => ({
         position: { x: centerX - width / 2, z: centerZ - depth / 2 },
       };
 
-      return { house: withUpdatedRoom(state.house, updated) };
+      return {
+        house: reconcile({
+          ...state.house,
+          rooms: { ...state.house.rooms, [roomId]: updated },
+        }),
+      };
+    }),
+
+  setRoomPosition: (roomId, x, z) =>
+    set((state) => {
+      const room = state.house.rooms[roomId];
+      if (!room || !Number.isFinite(x) || !Number.isFinite(z)) return state;
+      if (room.position.x === x && room.position.z === z) return state;
+
+      const updated = { ...room, position: { x, z } };
+      return {
+        house: reconcile({
+          ...state.house,
+          rooms: { ...state.house.rooms, [roomId]: updated },
+        }),
+      };
     }),
 
   moveRoomEdge: (roomId, edge, worldPosition) =>
@@ -168,36 +181,25 @@ export const useHouseStore = create<HouseState>((set, get) => ({
       const room = state.house.rooms[roomId];
       if (!room || !Number.isFinite(worldPosition)) return state;
 
-      const x0 = room.position.x;
-      const z0 = room.position.z;
-      const x1 = x0 + room.width;
-      const z1 = z0 + room.depth;
+      const refId = room.edges[edge];
+      const users = wallUsers(state.house, refId);
+      const rooms = { ...state.house.rooms };
 
-      let width = room.width;
-      let depth = room.depth;
-      let positionX = x0;
-      let positionZ = z0;
-
-      if (edge === "east") {
-        width = clamp(worldPosition - x0, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
-      } else if (edge === "west") {
-        width = clamp(x1 - worldPosition, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
-        positionX = x1 - width;
-      } else if (edge === "north") {
-        depth = clamp(worldPosition - z0, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
-      } else {
-        depth = clamp(z1 - worldPosition, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
-        positionZ = z1 - depth;
+      for (const user of users) {
+        const target = rooms[user.roomId];
+        if (!target) continue;
+        const moved = moveRoomEdgeRect(target, user.edge, worldPosition);
+        if (moved) rooms[user.roomId] = moved;
       }
 
-      const updated: Room = {
-        ...room,
-        width,
-        depth,
-        position: { x: positionX, z: positionZ },
-      };
+      if (!users.some((user) => user.roomId === roomId && user.edge === edge)) {
+        const moved = moveRoomEdgeRect(room, edge, worldPosition);
+        if (moved) rooms[roomId] = moved;
+      }
 
-      return { house: withUpdatedRoom(state.house, updated) };
+      return {
+        house: reconcile({ ...state.house, rooms }),
+      };
     }),
 
   addRoom: (spec = {}) => {
@@ -207,19 +209,38 @@ export const useHouseStore = create<HouseState>((set, get) => ({
       requestedId !== undefined && !house.rooms[requestedId]
         ? requestedId
         : nextRoomId(house);
-    const position =
+    const width = clampOr(spec.width, 4, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
+    const depth = clampOr(spec.depth, 4, MIN_ROOM_SIZE, MAX_ROOM_SIZE);
+
+    let position = { x: 0, z: 0 };
+    if (
       spec.position !== undefined &&
       Number.isFinite(spec.position.x) &&
       Number.isFinite(spec.position.z)
-        ? spec.position
-        : { x: 4, z: -2.5 };
+    ) {
+      position = spec.position;
+    } else {
+      const relative =
+        spec.relativeTo !== undefined
+          ? house.rooms[spec.relativeTo]
+          : undefined;
+      const anchor = relative ?? Object.values(house.rooms)[0];
+      if (anchor) {
+        position = {
+          x: anchor.position.x + anchor.width,
+          z: anchor.position.z + (anchor.depth - depth) / 2,
+        };
+      } else {
+        position = { x: -width / 2, z: -depth / 2 };
+      }
+    }
 
-    const { room, walls } = createRoom({
+    const { room } = createRoom({
       id,
       name: spec.name ?? `Room ${Object.keys(house.rooms).length + 1}`,
       position,
-      width: clampOr(spec.width, 4, MIN_ROOM_SIZE, MAX_ROOM_SIZE),
-      depth: clampOr(spec.depth, 4, MIN_ROOM_SIZE, MAX_ROOM_SIZE),
+      width,
+      depth,
       height: clampOr(spec.height, DEFAULT_WALL_HEIGHT, MIN_WALL_HEIGHT, MAX_WALL_HEIGHT),
       wallThickness: clampOr(
         spec.wallThickness,
@@ -230,14 +251,10 @@ export const useHouseStore = create<HouseState>((set, get) => ({
     });
 
     set((state) => ({
-      house: {
+      house: reconcile({
         ...state.house,
         rooms: { ...state.house.rooms, [room.id]: room },
-        walls: {
-          ...state.house.walls,
-          ...Object.fromEntries(walls.map((wall) => [wall.id, wall])),
-        },
-      },
+      }),
     }));
 
     return room.id;
@@ -246,26 +263,9 @@ export const useHouseStore = create<HouseState>((set, get) => ({
   removeRoom: (roomId) =>
     set((state) => {
       if (!state.house.rooms[roomId]) return state;
-
       const rooms = { ...state.house.rooms };
       delete rooms[roomId];
-
-      const removedWallIds = new Set<WallId>();
-      const walls = Object.fromEntries(
-        Object.entries(state.house.walls).filter(([, wall]) => {
-          if (wall.roomId !== roomId) return true;
-          removedWallIds.add(wall.id);
-          return false;
-        }),
-      );
-
-      const openings = Object.fromEntries(
-        Object.entries(state.house.openings).filter(
-          ([, opening]) => !removedWallIds.has(opening.wallId),
-        ),
-      );
-
-      return { house: { ...state.house, rooms, walls, openings } };
+      return { house: reconcile({ ...state.house, rooms }) };
     }),
 
   addOpening: (spec) => {

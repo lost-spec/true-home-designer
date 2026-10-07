@@ -20,12 +20,11 @@ export interface Room {
   depth: number;
   height: number;
   wallThickness: number;
+  edges: Record<RoomEdge, WallId>;
 }
 
 export interface Wall {
   id: WallId;
-  roomId: RoomId;
-  edge: RoomEdge;
   start: Vec2;
   end: Vec2;
   height: number;

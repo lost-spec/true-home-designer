@@ -1,4 +1,7 @@
 import { useEditorStore, type Tool } from "../store/editorStore";
+import { useHouseStore } from "../store/houseStore";
+import { firstWallUser } from "../geometry/roomGeometry";
+import type { RoomId } from "../types/house";
 
 const TOOLS: { id: Tool; label: string }[] = [
   { id: "select", label: "Select" },
@@ -16,6 +19,22 @@ export function Toolbar() {
   const toggleCeiling = useEditorStore((s) => s.toggleCeiling);
   const snapSize = useEditorStore((s) => s.snapSize);
   const setSnapSize = useEditorStore((s) => s.setSnapSize);
+
+  const createRoom = () => {
+    const house = useHouseStore.getState().house;
+    const selection = useEditorStore.getState().selection;
+    let relativeTo: RoomId | undefined;
+    if (selection?.kind === "room" && house.rooms[selection.id]) {
+      relativeTo = selection.id;
+    } else if (selection?.kind === "wall") {
+      relativeTo = firstWallUser(house, selection.id)?.roomId;
+    } else if (selection?.kind === "opening") {
+      const opening = house.openings[selection.id];
+      if (opening) relativeTo = firstWallUser(house, opening.wallId)?.roomId;
+    }
+    const id = useHouseStore.getState().addRoom({ relativeTo });
+    useEditorStore.getState().select({ kind: "room", id });
+  };
 
   return (
     <header className="toolbar">
@@ -36,6 +55,9 @@ export function Toolbar() {
             {entry.label}
           </button>
         ))}
+        <button onClick={createRoom} title="Add a new room beside the selection">
+          Create room
+        </button>
       </div>
       <div className="toolbar-group">
         <label className="toolbar-snap">

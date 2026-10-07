@@ -1,5 +1,7 @@
 import { useHouseStore, type RoomDimensionsPatch } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
+import { firstWallUser } from "../geometry/roomGeometry";
+import type { RoomId } from "../types/house";
 
 interface DimensionField {
   key: keyof RoomDimensionsPatch;
@@ -26,11 +28,20 @@ export function RoomDimensionsPanel() {
   const selection = useEditorStore((s) => s.selection);
   const house = useHouseStore((s) => s.house);
   const setRoomDimensions = useHouseStore((s) => s.setRoomDimensions);
+  const setRoomPosition = useHouseStore((s) => s.setRoomPosition);
 
-  const roomId =
-    selection?.kind === "room" && house.rooms[selection.id]
-      ? selection.id
-      : Object.keys(house.rooms)[0];
+  let roomId: RoomId | undefined;
+  if (selection?.kind === "room" && house.rooms[selection.id]) {
+    roomId = selection.id;
+  } else if (selection?.kind === "wall") {
+    roomId = firstWallUser(house, selection.id)?.roomId;
+  } else if (selection?.kind === "opening") {
+    const opening = house.openings[selection.id];
+    if (opening) roomId = firstWallUser(house, opening.wallId)?.roomId;
+  }
+  if (!roomId || !house.rooms[roomId]) {
+    roomId = Object.keys(house.rooms)[0];
+  }
   const room = roomId ? house.rooms[roomId] : undefined;
 
   if (!room) return null;
@@ -39,6 +50,16 @@ export function RoomDimensionsPanel() {
     const value = Number(raw);
     if (!Number.isFinite(value)) return;
     setRoomDimensions(room.id, { [key]: value });
+  };
+
+  const changePosition = (axis: "x" | "z", raw: string) => {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return;
+    setRoomPosition(
+      room.id,
+      axis === "x" ? value : room.position.x,
+      axis === "z" ? value : room.position.z,
+    );
   };
 
   return (
@@ -58,6 +79,24 @@ export function RoomDimensionsPanel() {
           />
         </label>
       ))}
+      <label className="position-row">
+        <span>Position X (m)</span>
+        <input
+          type="number"
+          step={0.1}
+          value={room.position.x}
+          onChange={(event) => changePosition("x", event.target.value)}
+        />
+      </label>
+      <label className="position-row">
+        <span>Position Z (m)</span>
+        <input
+          type="number"
+          step={0.1}
+          value={room.position.z}
+          onChange={(event) => changePosition("z", event.target.value)}
+        />
+      </label>
     </section>
   );
 }
