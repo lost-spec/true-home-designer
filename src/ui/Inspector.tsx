@@ -2,6 +2,8 @@ import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import { wallLength } from "../types/house";
 import { wallUsers } from "../geometry/roomGeometry";
+import { assetRegistry } from "../assets/registry";
+import { rotateObjectY } from "../interaction/objectInteraction";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -99,10 +101,22 @@ export function Inspector() {
 
   const object = house.objects[selection.id];
   if (!object) return null;
+  const asset = assetRegistry.get(object.assetId);
+  const allowRotation = asset?.allowRotation ?? true;
+  const allowScaling = asset?.allowScaling ?? true;
+  const rotate = (direction: 1 | -1) => {
+    useHouseStore.getState().updatePlacedObject(object.id, {
+      rotationY: rotateObjectY(object.rotationY, direction, allowRotation),
+    });
+  };
+  const remove = () => {
+    useHouseStore.getState().removePlacedObject(object.id);
+    useEditorStore.getState().select(null);
+  };
   return (
     <>
       <h2>Object</h2>
-      <Row label="Asset" value={object.assetId} />
+      <Row label="Asset" value={asset?.name ?? object.assetId} />
       <Row
         label="Position"
         value={`(${object.position.x.toFixed(1)}, ${object.position.z.toFixed(1)})`}
@@ -112,6 +126,29 @@ export function Inspector() {
         value={`${((object.rotationY * 180) / Math.PI).toFixed(0)}°`}
       />
       <Row label="Scale" value={`${object.scale.toFixed(2)}×`} />
+      <Row label="Can rotate" value={allowRotation ? "Yes" : "No"} />
+      <Row label="Can scale" value={allowScaling ? "Yes" : "No"} />
+      <div className="inspector-actions">
+        <button
+          disabled={!allowRotation}
+          title={
+            allowRotation ? "Rotate 45° counter-clockwise" : "This asset cannot rotate"
+          }
+          onClick={() => rotate(-1)}
+        >
+          Rotate −45°
+        </button>
+        <button
+          disabled={!allowRotation}
+          title={allowRotation ? "Rotate 45° clockwise" : "This asset cannot rotate"}
+          onClick={() => rotate(1)}
+        >
+          Rotate +45°
+        </button>
+        <button className="danger" title="Delete this object" onClick={remove}>
+          Remove
+        </button>
+      </div>
     </>
   );
 }

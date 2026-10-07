@@ -1,5 +1,8 @@
+import { Suspense } from "react";
 import { Grid, OrbitControls } from "@react-three/drei";
 import { HouseScene } from "./HouseScene";
+import { PlacementController } from "./PlacementController";
+import { PlacementPreview } from "./PlacementPreview";
 import { DevBridge } from "../devBridge";
 
 const TARGET: [number, number, number] = [0, 1, 0];
@@ -28,6 +31,10 @@ export function Scene() {
         infiniteGrid
       />
       <HouseScene />
+      <PlacementController />
+      <Suspense fallback={null}>
+        <PlacementPreview />
+      </Suspense>
       {import.meta.env.DEV ? <DevBridge /> : null}
       <OrbitControls
         makeDefault

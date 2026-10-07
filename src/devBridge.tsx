@@ -22,11 +22,17 @@ declare global {
       getSnapSize: () => number;
       setSnapSize: (value: number) => void;
       getDraggingWallId: () => string | null;
+      getDraggingObjectId: () => string | null;
+      getTool: () => string;
+      getPlacingAssetId: () => string | null;
+      getGhostPosition: () => { x: number; z: number } | null;
+      getPlacingRotationY: () => number;
       project: (x: number, y: number, z: number) => { x: number; y: number } | null;
       groundAt: (clientX: number, clientY: number) => { x: number; z: number } | null;
       measure: (name: string) => BoxBounds | null;
       pickWall: (clientX: number, clientY: number) => string | null;
       pickTop: (clientX: number, clientY: number) => string | null;
+      pickObject: (clientX: number, clientY: number) => string | null;
     };
   }
 }
@@ -69,6 +75,11 @@ export function DevBridge() {
       getSnapSize: () => useEditorStore.getState().snapSize,
       setSnapSize: (value) => useEditorStore.getState().setSnapSize(value),
       getDraggingWallId: () => useEditorStore.getState().draggingWallId,
+      getDraggingObjectId: () => useEditorStore.getState().draggingObjectId,
+      getTool: () => useEditorStore.getState().tool,
+      getPlacingAssetId: () => useEditorStore.getState().placingAssetId,
+      getGhostPosition: () => useEditorStore.getState().ghostPosition,
+      getPlacingRotationY: () => useEditorStore.getState().placingRotationY,
       project: (x, y, z) => projectToClient(camera, gl.domElement, x, y, z),
       groundAt: (clientX, clientY) =>
         groundHitFromClient(camera, gl.domElement, clientX, clientY),
@@ -97,6 +108,18 @@ export function DevBridge() {
         const hits = castInteractive(clientX, clientY);
         if (!hits.length) return null;
         return ancestorName(hits[0].object);
+      },
+      pickObject: (clientX, clientY) => {
+        const hits = castInteractive(clientX, clientY);
+        if (!hits.length) return null;
+        let current: THREE.Object3D | null = hits[0].object;
+        while (current) {
+          if (current.name.startsWith("object-")) {
+            return current.name.slice("object-".length);
+          }
+          current = current.parent;
+        }
+        return null;
       },
     };
 

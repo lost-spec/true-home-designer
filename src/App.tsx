@@ -5,14 +5,25 @@ import { Inspector } from "./ui/Inspector";
 import { AssetPanel } from "./ui/AssetPanel";
 import { RoomDimensionsPanel } from "./ui/RoomDimensionsPanel";
 import { useEditorStore } from "./store/editorStore";
+import { useEditorHotkeys } from "./interaction/useEditorHotkeys";
+import { assetRegistry } from "./assets/registry";
 
 export default function App() {
   const select = useEditorStore((s) => s.select);
+  const placingAssetId = useEditorStore((s) => s.placingAssetId);
+
+  useEditorHotkeys();
 
   const handlePointerMissed = () => {
     if (useEditorStore.getState().draggingWallId) return;
+    if (useEditorStore.getState().draggingObjectId) return;
+    if (useEditorStore.getState().placingAssetId) return;
     select(null);
   };
+
+  const placingAsset = placingAssetId
+    ? assetRegistry.get(placingAssetId)
+    : undefined;
 
   return (
     <div className="app">
@@ -28,6 +39,12 @@ export default function App() {
           >
             <Scene />
           </Canvas>
+          {placingAsset ? (
+            <div className="placement-hint">
+              Click the floor to place the {placingAsset.name} · R to rotate ·
+              Esc to cancel
+            </div>
+          ) : null}
         </div>
         <aside className="side-panel right">
           <RoomDimensionsPanel />

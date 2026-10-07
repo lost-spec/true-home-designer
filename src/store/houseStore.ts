@@ -24,6 +24,7 @@ import {
   type RoomSpec,
 } from "../geometry/roomGeometry";
 import { getWallPlacement } from "../geometry/wallGeometry";
+import { normalizeAngle } from "../interaction/objectInteraction";
 
 const MIN_WALL_HEIGHT = 1.5;
 const MAX_WALL_HEIGHT = 6;
@@ -57,6 +58,12 @@ function nextOpeningId(house: House, kind: OpeningKind): OpeningId {
   let index = 1;
   while (house.openings[`${kind}-${index}`]) index += 1;
   return `${kind}-${index}`;
+}
+
+export function nextObjectId(house: House): ObjectId {
+  let index = 1;
+  while (house.objects[`obj-${index}`]) index += 1;
+  return `obj-${index}`;
 }
 
 const firstRoom = createRoom({
@@ -120,6 +127,11 @@ export interface HouseState {
     patch: Partial<Omit<PlacedObject, "id">>,
   ) => void;
   removePlacedObject: (id: ObjectId) => void;
+  createPlacedObject: (
+    assetId: string,
+    position: { x: number; z: number },
+    rotationY?: number,
+  ) => ObjectId;
 }
 
 export const useHouseStore = create<HouseState>((set, get) => ({
@@ -366,4 +378,22 @@ export const useHouseStore = create<HouseState>((set, get) => ({
       delete objects[id];
       return { house: { ...state.house, objects } };
     }),
+
+  createPlacedObject: (assetId, position, rotationY = 0) => {
+    const id = nextObjectId(get().house);
+    const object: PlacedObject = {
+      id,
+      assetId,
+      position: { x: position.x, z: position.z },
+      rotationY: normalizeAngle(rotationY),
+      scale: 1,
+    };
+    set((state) => ({
+      house: {
+        ...state.house,
+        objects: { ...state.house.objects, [object.id]: object },
+      },
+    }));
+    return id;
+  },
 }));

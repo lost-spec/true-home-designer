@@ -22,7 +22,9 @@ export function FloorMesh({ roomId }: { roomId: string }) {
       receiveShadow
       onClick={(event) => {
         event.stopPropagation();
-        if (useEditorStore.getState().draggingWallId) return;
+        const state = useEditorStore.getState();
+        if (state.draggingWallId || state.draggingObjectId) return;
+        if (state.placingAssetId) return;
         select({ kind: "room", id: roomId });
       }}
     >

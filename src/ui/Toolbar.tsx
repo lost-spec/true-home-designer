@@ -19,6 +19,7 @@ export function Toolbar() {
   const toggleCeiling = useEditorStore((s) => s.toggleCeiling);
   const snapSize = useEditorStore((s) => s.snapSize);
   const setSnapSize = useEditorStore((s) => s.setSnapSize);
+  const placingAssetId = useEditorStore((s) => s.placingAssetId);
 
   const createRoom = () => {
     const house = useHouseStore.getState().house;
@@ -44,13 +45,31 @@ export function Toolbar() {
           <button
             key={entry.id}
             className={tool === entry.id ? "active" : ""}
-            disabled={entry.id !== "select"}
+            disabled={
+              entry.id === "select"
+                ? false
+                : entry.id === "placeObject"
+                  ? !placingAssetId && tool !== "placeObject"
+                  : true
+            }
             title={
               entry.id === "select"
                 ? "Click geometry to select it"
-                : "Coming in a later milestone"
+                : entry.id === "placeObject"
+                  ? placingAssetId
+                    ? tool === "placeObject"
+                      ? "Placing an asset — click to cancel"
+                      : `Resume placing ${placingAssetId}`
+                    : "Select an asset in the sidebar to place"
+                  : "Coming in a later milestone"
             }
-            onClick={() => setTool(entry.id)}
+            onClick={() => {
+              if (entry.id === "placeObject") {
+                setTool(tool === "placeObject" ? "select" : "placeObject");
+                return;
+              }
+              setTool(entry.id);
+            }}
           >
             {entry.label}
           </button>

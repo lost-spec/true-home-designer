@@ -43,6 +43,9 @@ export function WallMesh({ wallId }: { wallId: string }) {
 
   const selectWall = (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
+    const state = useEditorStore.getState();
+    if (state.draggingWallId || state.draggingObjectId) return;
+    if (state.placingAssetId) return;
     select({ kind: "wall", id: wallId });
   };
 
@@ -72,7 +75,9 @@ export function WallMesh({ wallId }: { wallId: string }) {
           castShadow
           onClick={(event) => {
             event.stopPropagation();
-            if (useEditorStore.getState().draggingWallId) return;
+            const state = useEditorStore.getState();
+            if (state.draggingWallId || state.draggingObjectId) return;
+            if (state.placingAssetId) return;
             select({ kind: "opening", id: opening.id });
           }}
         >

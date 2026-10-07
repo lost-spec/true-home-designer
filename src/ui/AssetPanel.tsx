@@ -1,6 +1,7 @@
 import { ASSET_CATEGORIES } from "../assets/types";
 import { assetRegistry } from "../assets/registry";
 import { preloadAsset } from "../assets/useAssetModel";
+import { useEditorStore } from "../store/editorStore";
 
 function dimsLabel(asset: {
   dimensions: { width: number; height: number; depth: number };
@@ -10,6 +11,7 @@ function dimsLabel(asset: {
 }
 
 export function AssetPanel() {
+  const placingAssetId = useEditorStore((s) => s.placingAssetId);
   const groups = ASSET_CATEGORIES.map((category) => ({
     category,
     assets: assetRegistry.byCategory(category),
@@ -19,8 +21,8 @@ export function AssetPanel() {
     <aside className="side-panel">
       <h2>Assets</h2>
       <p className="panel-hint">
-        Drag &amp; place lands in the next milestone. Clicking is disabled for
-        now.
+        Pick an asset, then click the floor to place it. Move: drag the object.
+        Rotate: R. Cancel: Esc.
       </p>
       {groups.map(({ category, assets }) => (
         <section key={category} className="asset-group">
@@ -31,7 +33,24 @@ export function AssetPanel() {
                 key={asset.assetId}
                 onMouseEnter={() => preloadAsset(asset.modelPath)}
               >
-                <button disabled title="Placement comes in the next milestone">
+                <button
+                  className={
+                    placingAssetId === asset.assetId ? "active" : ""
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    const state = useEditorStore.getState();
+                    if (
+                      state.tool === "placeObject" &&
+                      state.placingAssetId === asset.assetId
+                    ) {
+                      return;
+                    }
+                    state.setTool("placeObject");
+                    state.setPlacingAssetId(asset.assetId);
+                  }}
+                  title={`Place ${asset.name}`}
+                >
                   {asset.thumbnailPath ? (
                     <img
                       className="asset-thumb"

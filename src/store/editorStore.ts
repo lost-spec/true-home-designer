@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Vec2 } from "../types/house";
 
 export type Tool = "select" | "drawRoom" | "drawWall" | "placeObject";
 
@@ -15,12 +16,26 @@ export interface EditorState {
   ceilingVisible: boolean;
   snapSize: number;
   draggingWallId: string | null;
+  placingAssetId: string | null;
+  placingRotationY: number;
+  ghostPosition: Vec2 | null;
+  draggingObjectId: string | null;
   setTool: (tool: Tool) => void;
   select: (selection: Selection) => void;
   toggleCeiling: () => void;
   setSnapSize: (snapSize: number) => void;
   setDraggingWallId: (wallId: string | null) => void;
+  setPlacingAssetId: (assetId: string | null) => void;
+  setPlacingRotationY: (rotationY: number) => void;
+  setGhostPosition: (position: Vec2 | null) => void;
+  setDraggingObjectId: (objectId: string | null) => void;
 }
+
+const IDLE_PLACEMENT = {
+  placingAssetId: null,
+  placingRotationY: 0,
+  ghostPosition: null,
+} as const;
 
 export const useEditorStore = create<EditorState>((set) => ({
   tool: "select",
@@ -28,11 +43,28 @@ export const useEditorStore = create<EditorState>((set) => ({
   ceilingVisible: true,
   snapSize: 0.1,
   draggingWallId: null,
-  setTool: (tool) => set({ tool }),
+  placingAssetId: null,
+  placingRotationY: 0,
+  ghostPosition: null,
+  draggingObjectId: null,
+  setTool: (tool) => set({ tool, ...IDLE_PLACEMENT }),
   select: (selection) => set({ selection }),
   toggleCeiling: () =>
     set((state) => ({ ceilingVisible: !state.ceilingVisible })),
   setSnapSize: (snapSize) =>
     set({ snapSize: Number.isFinite(snapSize) && snapSize > 0 ? snapSize : 0.1 }),
   setDraggingWallId: (draggingWallId) => set({ draggingWallId }),
+  setPlacingAssetId: (assetId) =>
+    set({
+      placingAssetId: assetId,
+      placingRotationY: 0,
+      ghostPosition: null,
+      selection: null,
+    }),
+  setPlacingRotationY: (rotationY) =>
+    set({
+      placingRotationY: Number.isFinite(rotationY) ? rotationY : 0,
+    }),
+  setGhostPosition: (position) => set({ ghostPosition: position }),
+  setDraggingObjectId: (objectId) => set({ draggingObjectId: objectId }),
 }));
