@@ -9,6 +9,7 @@ import {
   resolveWallDrag,
 } from "./wallInteraction";
 import { GROUND_PLANE, groundHitFromClient } from "./pointerProjection";
+import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 
 const GUARD_FALLBACK_MS = 400;
 const rayPoint = new THREE.Vector3();
@@ -44,6 +45,8 @@ export function useWallDrag(wallId: string) {
       if (!hit) return;
 
       event.stopPropagation();
+      // One continuous drag (many pointermove commits) becomes one undo step.
+      beginHistoryBatch();
 
       const anchor = createWallDragAnchor(target, room, {
         x: hit.x,
@@ -73,6 +76,7 @@ export function useWallDrag(wallId: string) {
       const finish = (clearGuardNow: boolean) => {
         if (listenersActive) {
           listenersActive = false;
+          endHistoryBatch();
           window.removeEventListener("pointermove", handleMove);
           window.removeEventListener("pointerup", handleUp);
           window.removeEventListener("pointercancel", handleCancel);

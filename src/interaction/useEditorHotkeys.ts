@@ -1,6 +1,12 @@
 import { useEffect } from "react";
 import { useEditorStore } from "../store/editorStore";
 import { useHouseStore } from "../store/houseStore";
+import {
+  beginHistoryBatch,
+  endHistoryBatch,
+  forceEndHistoryBatches,
+  undoRedoAction,
+} from "../store/history";
 import { assetRegistry } from "../assets/registry";
 import { rotateObjectY, stepObjectElevation } from "./objectInteraction";
 import { zoomCamera } from "./cameraZoom";
@@ -19,9 +25,37 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 export function useEditorHotkeys() {
   useEffect(() => {
+    // Codes (not keys) that opened a history batch on their first keydown, so
+    // OS key-repeat collapses into one history entry per held key.
+    const heldBatchCodes = new Set<string>();
+
+    const beginKeyBatch = (code: string) => {
+      if (heldBatchCodes.has(code)) return;
+      heldBatchCodes.add(code);
+      beginHistoryBatch();
+    };
+    const endKeyBatch = (code: string) => {
+      if (!heldBatchCodes.delete(code)) return;
+      endHistoryBatch();
+    };
+    const releaseKeyBatches = () => {
+      for (const code of [...heldBatchCodes]) endKeyBatch(code);
+      forceEndHistoryBatches();
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditableTarget(event.target)) return;
+
+      const undoRedo = undoRedoAction(event);
+      if (undoRedo) {
+        event.preventDefault();
+        const store = useHouseStore.getState();
+        if (undoRedo === "redo") store.redo();
+        else store.undo();
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const editor = useEditorStore.getState();
 
@@ -57,6 +91,7 @@ export function useEditorHotkeys() {
           const object = store.house.objects[selection.id];
           if (!object) return;
           const asset = assetRegistry.get(object.assetId);
+          beginKeyBatch(event.code);
           store.updatePlacedObject(object.id, {
             rotationY: rotateObjectY(
               object.rotationY,
@@ -76,6 +111,7 @@ export function useEditorHotkeys() {
         const object = store.house.objects[selection.id];
         if (!object) return;
         const direction = event.key === "PageUp" ? 1 : -1;
+        beginKeyBatch(event.code);
         store.updatePlacedObject(object.id, {
           position: {
             ...object.position,
@@ -118,7 +154,28 @@ export function useEditorHotkeys() {
       }
     };
 
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (
+        event.code === "KeyR" ||
+        event.code === "PageUp" ||
+        event.code === "PageDown"
+      ) {
+        endKeyBatch(event.code);
+      }
+    };
+
+    // A lost window means the matching keyup may never arrive; close every
+    // open batch so undo can never be blocked by a leaked one.
+    const onWindowBlur = () => releaseKeyBatches();
+
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+      releaseKeyBatches();
+    };
   }, []);
 }

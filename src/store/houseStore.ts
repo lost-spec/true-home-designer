@@ -30,6 +30,13 @@ import {
   openingsConflict,
 } from "../geometry/openingGeometry";
 import { normalizeAngle } from "../interaction/objectInteraction";
+import {
+  recordHouseChange,
+  suppressHistory,
+  takeRedo,
+  takeUndo,
+} from "./history";
+import { useEditorStore } from "./editorStore";
 
 const MIN_WALL_HEIGHT = 1.5;
 const MAX_WALL_HEIGHT = 6;
@@ -182,9 +189,47 @@ export interface HouseState {
     position: { x: number; z: number },
     rotationY?: number,
   ) => ObjectId;
+  undo: () => void;
+  redo: () => void;
 }
 
-export const useHouseStore = create<HouseState>((set, get) => ({
+/**
+ * After restoring a snapshot the current selection may reference an entity
+ * that no longer exists; drop it so no panel or drag can act on a phantom id.
+ */
+function repairSelection(house: House): void {
+  const editor = useEditorStore.getState();
+  const selection = editor.selection;
+  if (!selection) return;
+  const exists =
+    selection.kind === "room"
+      ? house.rooms[selection.id] !== undefined
+      : selection.kind === "wall"
+        ? house.walls[selection.id] !== undefined
+        : selection.kind === "opening"
+          ? house.openings[selection.id] !== undefined
+          : house.objects[selection.id] !== undefined;
+  if (!exists) editor.select(null);
+}
+
+export const useHouseStore = create<HouseState>((rawSet, get) => {
+  // Every action mutates through this set, so each house write is observed
+  // exactly once and history recording stays in one place. Actions that
+  // return the unchanged state are skipped by the reference check inside
+  // recordHouseChange.
+  const set = (
+    partial:
+      | HouseState
+      | Partial<HouseState>
+      | ((state: HouseState) => HouseState | Partial<HouseState>),
+    replace?: false,
+  ) => {
+    const previous = get().house;
+    rawSet(partial, replace);
+    recordHouseChange(previous, get().house);
+  };
+
+  return {
   house: sampleHouse,
 
   replaceHouse: (house) => set({ house }),
@@ -473,4 +518,35 @@ export const useHouseStore = create<HouseState>((set, get) => ({
     }));
     return id;
   },
-}));
+
+  undo: () => {
+    const editor = useEditorStore.getState();
+    if (
+      editor.draggingWallId !== null ||
+      editor.draggingObjectId !== null ||
+      editor.draggingOpeningId !== null
+    ) {
+      return;
+    }
+    const previous = takeUndo(get().house);
+    if (previous === null) return;
+    suppressHistory(() => set({ house: previous }));
+    repairSelection(previous);
+  },
+
+  redo: () => {
+    const editor = useEditorStore.getState();
+    if (
+      editor.draggingWallId !== null ||
+      editor.draggingObjectId !== null ||
+      editor.draggingOpeningId !== null
+    ) {
+      return;
+    }
+    const next = takeRedo(get().house);
+    if (next === null) return;
+    suppressHistory(() => set({ house: next }));
+    repairSelection(next);
+  },
+  };
+});

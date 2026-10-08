@@ -5,6 +5,7 @@ import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import { resolveObjectMove } from "./objectInteraction";
 import { GROUND_PLANE, groundHitFromClient } from "./pointerProjection";
+import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 
 const GUARD_FALLBACK_MS = 400;
 const rayPoint = new THREE.Vector3();
@@ -43,6 +44,8 @@ export function useObjectDrag(objectId: string) {
       if (!hit) return;
 
       event.stopPropagation();
+      // One continuous drag (many pointermove commits) becomes one undo step.
+      beginHistoryBatch();
 
       const grabOffset = {
         x: hit.x - object.position.x,
@@ -71,6 +74,7 @@ export function useObjectDrag(objectId: string) {
       const finish = (clearGuardNow: boolean) => {
         if (listenersActive) {
           listenersActive = false;
+          endHistoryBatch();
           window.removeEventListener("pointermove", handleMove);
           window.removeEventListener("pointerup", handleUp);
           window.removeEventListener("pointercancel", handleCancel);

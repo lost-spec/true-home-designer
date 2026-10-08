@@ -18,6 +18,7 @@ import {
   type WallDragAnchor,
 } from "../interaction/wallInteraction";
 import { resolveOpeningOffset } from "../interaction/openingInteraction";
+import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 import {
   doorPlanGeometry,
   objectPlanRect,
@@ -145,6 +146,10 @@ export function FloorPlan2D() {
     const drag = dragRef.current;
     if (!drag) return;
     dragRef.current = null;
+    // Pair with the beginHistoryBatch() that opened with this drag: every
+    // exit path (pointerup, cancel, blur, unmount, mid-move abort) lands here,
+    // so one drag always collapses into exactly one history entry.
+    endHistoryBatch();
     if (suppressClick) suppressClickRef.current = true;
     const editor = useEditorStore.getState();
     if (drag.kind === "wall") editor.setDraggingWallId(null);
@@ -190,6 +195,7 @@ export function FloorPlan2D() {
         moved: false,
         anchor: createWallDragAnchor(target, room, world),
       };
+      beginHistoryBatch();
       editor.setDraggingWallId(entity.id);
       return;
     }
@@ -198,6 +204,7 @@ export function FloorPlan2D() {
       if (!current.openings[entity.id]) return;
       editor.select({ kind: "opening", id: entity.id });
       dragRef.current = { kind: "opening", id: entity.id, moved: false };
+      beginHistoryBatch();
       editor.setDraggingOpeningId(entity.id);
       return;
     }
@@ -214,6 +221,7 @@ export function FloorPlan2D() {
         z: world.z - object.position.z,
       },
     };
+    beginHistoryBatch();
     editor.setDraggingObjectId(entity.id);
   };
 

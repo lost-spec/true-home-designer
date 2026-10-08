@@ -1,5 +1,6 @@
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
+import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 import { wallLength, type OpeningKind } from "../types/house";
 import { wallUsers } from "../geometry/roomGeometry";
 import {
@@ -39,6 +40,8 @@ function Field({ label, value, min, max, step, disabled, onChange }: FieldProps)
         step={step}
         value={value}
         disabled={disabled}
+        onFocus={() => beginHistoryBatch()}
+        onBlur={() => endHistoryBatch()}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>

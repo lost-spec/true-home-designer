@@ -3,6 +3,7 @@ import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useHouseStore } from "./store/houseStore";
 import { useEditorStore } from "./store/editorStore";
+import { getHistoryFlags } from "./store/history";
 import {
   clientToNdc,
   groundHitFromClient,
@@ -37,6 +38,10 @@ declare global {
       pickTop: (clientX: number, clientY: number) => string | null;
       pickObject: (clientX: number, clientY: number) => string | null;
       pickOpening: (clientX: number, clientY: number) => string | null;
+      getCanUndo: () => boolean;
+      getCanRedo: () => boolean;
+      undo: () => void;
+      redo: () => void;
     };
   }
 }
@@ -144,6 +149,10 @@ export function DevBridge() {
         }
         return null;
       },
+      getCanUndo: () => getHistoryFlags().canUndo,
+      getCanRedo: () => getHistoryFlags().canRedo,
+      undo: () => useHouseStore.getState().undo(),
+      redo: () => useHouseStore.getState().redo(),
     };
 
     return () => {

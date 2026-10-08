@@ -1,5 +1,6 @@
 import { useHouseStore, type RoomDimensionsPatch } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
+import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 import { firstWallUser } from "../geometry/roomGeometry";
 import type { RoomId } from "../types/house";
 
@@ -23,6 +24,13 @@ const FIELDS: DimensionField[] = [
     step: 0.01,
   },
 ];
+
+// Editing one field from focus to blur is a single undo step, no matter how
+// many keystrokes it takes.
+const historyBatchProps = {
+  onFocus: () => beginHistoryBatch(),
+  onBlur: () => endHistoryBatch(),
+};
 
 export function RoomDimensionsPanel() {
   const selection = useEditorStore((s) => s.selection);
@@ -75,6 +83,7 @@ export function RoomDimensionsPanel() {
             max={field.max}
             step={field.step}
             value={room[field.key] ?? ""}
+            {...historyBatchProps}
             onChange={(event) => change(field.key, event.target.value)}
           />
         </label>
@@ -85,6 +94,7 @@ export function RoomDimensionsPanel() {
           type="number"
           step={0.1}
           value={room.position.x}
+          {...historyBatchProps}
           onChange={(event) => changePosition("x", event.target.value)}
         />
       </label>
@@ -94,6 +104,7 @@ export function RoomDimensionsPanel() {
           type="number"
           step={0.1}
           value={room.position.z}
+          {...historyBatchProps}
           onChange={(event) => changePosition("z", event.target.value)}
         />
       </label>

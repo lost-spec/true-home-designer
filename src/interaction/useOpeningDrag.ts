@@ -5,6 +5,7 @@ import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import { resolveOpeningOffset } from "./openingInteraction";
 import { GROUND_PLANE, groundHitFromClient } from "./pointerProjection";
+import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 
 const GUARD_FALLBACK_MS = 400;
 const rayPoint = new THREE.Vector3();
@@ -46,6 +47,8 @@ export function useOpeningDrag(openingId: string) {
       if (!hit) return;
 
       event.stopPropagation();
+      // One continuous drag (many pointermove commits) becomes one undo step.
+      beginHistoryBatch();
 
       editor.select({ kind: "opening", id: openingId });
       editor.setDraggingOpeningId(openingId);
@@ -70,6 +73,7 @@ export function useOpeningDrag(openingId: string) {
       const finish = (clearGuardNow: boolean) => {
         if (listenersActive) {
           listenersActive = false;
+          endHistoryBatch();
           window.removeEventListener("pointermove", handleMove);
           window.removeEventListener("pointerup", handleUp);
           window.removeEventListener("pointercancel", handleCancel);

@@ -1,5 +1,7 @@
+import { useSyncExternalStore } from "react";
 import { useEditorStore, type Tool } from "../store/editorStore";
 import { useHouseStore } from "../store/houseStore";
+import { getHistoryFlags, subscribeHistory } from "../store/history";
 import { firstWallUser } from "../geometry/roomGeometry";
 import { zoomCamera } from "../interaction/cameraZoom";
 import type { RoomId } from "../types/house";
@@ -24,6 +26,11 @@ export function Toolbar() {
   const selection = useEditorStore((s) => s.selection);
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
+  const history = useSyncExternalStore(
+    subscribeHistory,
+    getHistoryFlags,
+    getHistoryFlags,
+  );
 
   const selectedWallId =
     selection?.kind === "wall"
@@ -57,6 +64,22 @@ export function Toolbar() {
   return (
     <header className="toolbar">
       <span className="toolbar-title">True Home Designer</span>
+      <div className="toolbar-group">
+        <button
+          disabled={!history.canUndo}
+          onClick={() => useHouseStore.getState().undo()}
+          title="Undo the last edit (Ctrl+Z)"
+        >
+          Undo
+        </button>
+        <button
+          disabled={!history.canRedo}
+          onClick={() => useHouseStore.getState().redo()}
+          title="Redo the last undone edit (Ctrl+Shift+Z)"
+        >
+          Redo
+        </button>
+      </div>
       <div className="toolbar-group">
         {TOOLS.map((entry) => (
           <button
