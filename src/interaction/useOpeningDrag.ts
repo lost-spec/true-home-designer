@@ -3,24 +3,26 @@ import { useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
-import {
-  createWallDragAnchor,
-  findRoomEdgeForWall,
-  resolveWallDrag,
-} from "./wallInteraction";
+import { resolveOpeningOffset } from "./openingInteraction";
 import { GROUND_PLANE, groundHitFromClient } from "./pointerProjection";
 
 const GUARD_FALLBACK_MS = 400;
 const rayPoint = new THREE.Vector3();
 
 interface DragSession {
-  wallId: string;
+  openingId: string;
   finish: (clearGuard: boolean) => void;
 }
 
 let session: DragSession | null = null;
 
-export function useWallDrag(wallId: string) {
+/**
+ * Slide an opening along its wall by dragging it in the viewport. The pointer
+ * is projected onto the ground plane, resolved to a wall-local offset by the
+ * pure helpers in openingInteraction, and committed through updateOpening —
+ * which owns all validation, so a drag can never create an invalid opening.
+ */
+export function useOpeningDrag(openingId: string) {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const controls = useThree((s) => s.controls) as unknown as {
@@ -30,30 +32,25 @@ export function useWallDrag(wallId: string) {
   const onPointerDown = useCallback(
     (event: ThreeEvent<PointerEvent>) => {
       if (event.button !== 0) return;
-      if (useEditorStore.getState().tool !== "select") return;
-      if (useEditorStore.getState().draggingOpeningId) return;
+      const editor = useEditorStore.getState();
+      if (editor.tool !== "select") return;
+      if (editor.draggingWallId || editor.draggingObjectId) return;
       if (session) session.finish(true);
 
       const house = useHouseStore.getState().house;
-      const target = findRoomEdgeForWall(house, wallId);
-      if (!target) return;
-      const room = house.rooms[target.roomId];
-      if (!room) return;
+      const opening = house.openings[openingId];
+      const wall = opening ? house.walls[opening.wallId] : undefined;
+      if (!opening || !wall) return;
 
       const hit = event.ray.intersectPlane(GROUND_PLANE, rayPoint);
       if (!hit) return;
 
       event.stopPropagation();
 
-      const anchor = createWallDragAnchor(target, room, {
-        x: hit.x,
-        z: hit.z,
-      });
-      const dom = gl.domElement;
-      const editor = useEditorStore.getState();
-      editor.select({ kind: "wall", id: wallId });
-      editor.setDraggingWallId(wallId);
+      editor.select({ kind: "opening", id: openingId });
+      editor.setDraggingOpeningId(openingId);
 
+      const dom = gl.domElement;
       if (controls) controls.enabled = false;
       const previousCursor = document.body.style.cursor;
       document.body.style.cursor = "grabbing";
@@ -67,7 +64,7 @@ export function useWallDrag(wallId: string) {
           guardTimer = null;
         }
         window.removeEventListener("click", handleClick);
-        useEditorStore.getState().setDraggingWallId(null);
+        useEditorStore.getState().setDraggingOpeningId(null);
       };
 
       const finish = (clearGuardNow: boolean) => {
@@ -102,8 +99,28 @@ export function useWallDrag(wallId: string) {
           moveEvent.clientY,
         );
         if (!ground) return;
-        const position = resolveWallDrag(anchor, ground, useEditorStore.getState().snapSize);
-        useHouseStore.getState().moveRoomEdge(anchor.roomId, anchor.edge, position);
+        const state = useHouseStore.getState();
+        const current = state.house.openings[openingId];
+        if (!current) {
+          finish(true);
+          return;
+        }
+        const currentWall = state.house.walls[current.wallId];
+        if (!currentWall) {
+          finish(true);
+          return;
+        }
+        const others = Object.values(state.house.openings).filter(
+          (other) => other.wallId === current.wallId && other.id !== openingId,
+        );
+        const offset = resolveOpeningOffset(
+          currentWall,
+          current,
+          ground,
+          useEditorStore.getState().snapSize,
+          others,
+        );
+        state.updateOpening(openingId, { offset });
       };
 
       window.addEventListener("pointermove", handleMove);
@@ -112,29 +129,17 @@ export function useWallDrag(wallId: string) {
       window.addEventListener("blur", handleBlur);
       window.addEventListener("click", handleClick);
 
-      session = { wallId, finish };
+      session = { openingId, finish };
     },
-    [wallId, camera, gl, controls],
+    [openingId, camera, gl, controls],
   );
-
-  const onPointerOver = useCallback(() => {
-    const state = useEditorStore.getState();
-    if (state.draggingWallId || state.draggingOpeningId) return;
-    document.body.style.cursor = "grab";
-  }, []);
-
-  const onPointerOut = useCallback(() => {
-    const state = useEditorStore.getState();
-    if (state.draggingWallId || state.draggingOpeningId) return;
-    document.body.style.cursor = "";
-  }, []);
 
   useEffect(
     () => () => {
-      if (session && session.wallId === wallId) session.finish(true);
+      if (session && session.openingId === openingId) session.finish(true);
     },
-    [wallId],
+    [openingId],
   );
 
-  return { onPointerDown, onPointerOver, onPointerOut };
+  return { onPointerDown };
 }

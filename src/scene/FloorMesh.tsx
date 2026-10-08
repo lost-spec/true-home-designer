@@ -24,6 +24,7 @@ export function FloorMesh({ roomId }: { roomId: string }) {
         event.stopPropagation();
         const state = useEditorStore.getState();
         if (state.draggingWallId || state.draggingObjectId) return;
+        if (state.draggingOpeningId) return;
         if (state.placingAssetId) return;
         select({ kind: "room", id: roomId });
       }}

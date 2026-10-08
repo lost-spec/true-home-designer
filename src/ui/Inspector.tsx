@@ -1,7 +1,11 @@
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
-import { wallLength } from "../types/house";
+import { wallLength, type OpeningKind } from "../types/house";
 import { wallUsers } from "../geometry/roomGeometry";
+import {
+  MIN_OPENING_HEIGHT,
+  MIN_OPENING_WIDTH,
+} from "../geometry/openingGeometry";
 import { assetRegistry } from "../assets/registry";
 import { rotateObjectY, stepObjectElevation, zoomObjectScale, MAX_OBJECT_ELEVATION, MIN_OBJECT_ELEVATION, MAX_OBJECT_SCALE, MIN_OBJECT_SCALE } from "../interaction/objectInteraction";
 
@@ -14,7 +18,39 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+interface FieldProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange: (raw: string) => void;
+}
+
+function Field({ label, value, min, max, step, disabled, onChange }: FieldProps) {
+  return (
+    <label className="dimension-row">
+      <span>{label}</span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
 const metres = (value: number) => `${value.toFixed(2)} m`;
+
+function addOpeningToWall(wallId: string, kind: OpeningKind) {
+  const id = useHouseStore.getState().createOpening(wallId, kind);
+  if (id) useEditorStore.getState().select({ kind: "opening", id });
+}
 
 export function Inspector() {
   const selection = useEditorStore((s) => s.selection);
@@ -56,6 +92,20 @@ export function Inspector() {
           label="End"
           value={`(${wall.end.x.toFixed(1)}, ${wall.end.z.toFixed(1)})`}
         />
+        <div className="inspector-actions">
+          <button
+            title="Cut a door opening into this wall"
+            onClick={() => addOpeningToWall(wall.id, "door")}
+          >
+            Add door
+          </button>
+          <button
+            title="Cut a window opening into this wall"
+            onClick={() => addOpeningToWall(wall.id, "window")}
+          >
+            Add window
+          </button>
+        </div>
       </>
     );
   }
@@ -63,16 +113,78 @@ export function Inspector() {
   if (selection.kind === "opening") {
     const opening = house.openings[selection.id];
     if (!opening) return null;
+    const wall = house.walls[opening.wallId];
+    const runLength = wall ? wallLength(wall) : 0;
+    const wallHeight = wall ? wall.height : 0;
+    const isDoor = opening.kind === "door";
+
+    const update = (
+      key: "offset" | "width" | "height" | "sillHeight",
+      raw: string,
+    ) => {
+      if (raw.trim() === "") return;
+      const value = Number(raw);
+      if (!Number.isFinite(value)) return;
+      useHouseStore.getState().updateOpening(opening.id, { [key]: value });
+    };
+
+    const remove = () => {
+      useHouseStore.getState().removeOpening(opening.id);
+      useEditorStore.getState().select(null);
+    };
+
     return (
       <>
-        <h2>{opening.kind === "door" ? "Door" : "Window"}</h2>
-        <Row label="Width" value={metres(opening.width)} />
-        <Row label="Height" value={metres(opening.height)} />
-        <Row label="Sill height" value={metres(opening.sillHeight)} />
-        <Row
-          label="Offset along wall"
-          value={metres(opening.offset)}
+        <h2>{isDoor ? "Door" : "Window"}</h2>
+        <Row label="Wall length" value={metres(runLength)} />
+        <Field
+          label="Offset along wall (m)"
+          value={opening.offset}
+          min={0}
+          max={Math.max(0, runLength - opening.width)}
+          step={0.05}
+          onChange={(raw) => update("offset", raw)}
         />
+        <Field
+          label="Width (m)"
+          value={opening.width}
+          min={MIN_OPENING_WIDTH}
+          max={Math.max(MIN_OPENING_WIDTH, runLength)}
+          step={0.05}
+          onChange={(raw) => update("width", raw)}
+        />
+        <Field
+          label="Height (m)"
+          value={opening.height}
+          min={MIN_OPENING_HEIGHT}
+          max={Math.max(MIN_OPENING_HEIGHT, wallHeight - opening.sillHeight)}
+          step={0.05}
+          onChange={(raw) => update("height", raw)}
+        />
+        {isDoor ? null : (
+          <Field
+            label="Sill height (m)"
+            value={opening.sillHeight}
+            min={0}
+            max={Math.max(0, wallHeight - MIN_OPENING_HEIGHT)}
+            step={0.05}
+            onChange={(raw) => update("sillHeight", raw)}
+          />
+        )}
+        <p className="panel-hint">
+          Drag the {isDoor ? "door" : "window"} in the viewport to slide it
+          along the wall. Values are limited so the opening stays inside the
+          wall and clear of other openings.
+        </p>
+        <div className="inspector-actions">
+          <button
+            className="danger"
+            title={`Delete this ${isDoor ? "door" : "window"} (Delete)`}
+            onClick={remove}
+          >
+            Remove
+          </button>
+        </div>
       </>
     );
   }

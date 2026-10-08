@@ -20,6 +20,7 @@ export interface EditorState {
   placingRotationY: number;
   ghostPosition: Vec2 | null;
   draggingObjectId: string | null;
+  draggingOpeningId: string | null;
   setTool: (tool: Tool) => void;
   select: (selection: Selection) => void;
   toggleCeiling: () => void;
@@ -29,6 +30,7 @@ export interface EditorState {
   setPlacingRotationY: (rotationY: number) => void;
   setGhostPosition: (position: Vec2 | null) => void;
   setDraggingObjectId: (objectId: string | null) => void;
+  setDraggingOpeningId: (openingId: string | null) => void;
 }
 
 const IDLE_PLACEMENT = {
@@ -47,6 +49,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   placingRotationY: 0,
   ghostPosition: null,
   draggingObjectId: null,
+  draggingOpeningId: null,
   setTool: (tool) => set({ tool, ...IDLE_PLACEMENT }),
   select: (selection) => set({ selection }),
   toggleCeiling: () =>
@@ -67,4 +70,5 @@ export const useEditorStore = create<EditorState>((set) => ({
     }),
   setGhostPosition: (position) => set({ ghostPosition: position }),
   setDraggingObjectId: (objectId) => set({ draggingObjectId: objectId }),
+  setDraggingOpeningId: (openingId) => set({ draggingOpeningId: openingId }),
 }));

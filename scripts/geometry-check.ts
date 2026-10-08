@@ -13,9 +13,20 @@ import { getFloorBox } from "../src/geometry/floorGeometry";
 import { getCeilingBox } from "../src/geometry/ceilingGeometry";
 import {
   getOpeningFillBox,
+  getOpeningFrameBoxes,
   getWallBoxes,
+  getWallHoleRects,
   getWallPlacement,
+  type BoxSpec,
 } from "../src/geometry/wallGeometry";
+import {
+  DEFAULT_DOOR_SIZE,
+  findOpeningOffset,
+  openingsConflict,
+  rectsOverlap,
+  type OpeningRect,
+} from "../src/geometry/openingGeometry";
+import { resolveOpeningOffset } from "../src/interaction/openingInteraction";
 import { useHouseStore } from "../src/store/houseStore";
 import {
   createWallDragAnchor,
@@ -28,6 +39,8 @@ import {
   CEILING_THICKNESS,
   FLOOR_THICKNESS,
   type House,
+  type Opening,
+  type Wall,
 } from "../src/types/house";
 
 let failures = 0;
@@ -745,6 +758,452 @@ check(
 check(
   "extreme drag keeps both rooms rectangle-consistent",
   coverageOk(h, "room-1") && coverageOk(h, split),
+);
+
+// ---------------------------------------------------------------------------
+// Opening authoring: creation, editing, serialisation, geometry invariants
+// ---------------------------------------------------------------------------
+
+const boxRect = (b: BoxSpec): OpeningRect => ({
+  x0: b.position[0] - b.size[0] / 2,
+  x1: b.position[0] + b.size[0] / 2,
+  y0: b.position[1] - b.size[1] / 2,
+  y1: b.position[1] + b.size[1] / 2,
+});
+
+const rectContains = (r: OpeningRect, x: number, y: number) =>
+  x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
+
+const rectsDisjoint = (rects: OpeningRect[]): boolean => {
+  for (let i = 0; i < rects.length; i += 1) {
+    for (let j = i + 1; j < rects.length; j += 1) {
+      if (rectsOverlap(rects[i], rects[j])) return false;
+    }
+  }
+  return true;
+};
+
+useHouseStore.getState().replaceHouse(freshHouse);
+h = houseNow();
+const authorWallId = roomWallId("room-1", "south");
+
+const autoDoorId = model().createOpening(authorWallId, "door");
+h = houseNow();
+const autoDoorRec = autoDoorId !== null ? h.openings[autoDoorId] : undefined;
+check(
+  "createOpening adds an auto-placed door",
+  autoDoorRec !== undefined &&
+    autoDoorRec.kind === "door" &&
+    autoDoorRec.sillHeight === 0 &&
+    autoDoorRec.width > 0,
+);
+check(
+  "auto-placed door is centred on an empty wall",
+  autoDoorRec !== undefined &&
+    approx(autoDoorRec.offset + autoDoorRec.width / 2, 3),
+);
+const autoDoorId2 = model().createOpening(authorWallId, "door");
+h = houseNow();
+const autoDoorRec2 = autoDoorId2 !== null ? h.openings[autoDoorId2] : undefined;
+check(
+  "second auto-placed door clears the first",
+  autoDoorRec2 !== undefined &&
+    autoDoorRec !== undefined &&
+    !openingsConflict(autoDoorRec2, [autoDoorRec]),
+);
+check(
+  "createOpening rejects an unknown wall",
+  model().createOpening("nope", "window") === null,
+);
+check(
+  "findOpeningOffset gives up when the wall is full",
+  findOpeningOffset(h.walls[authorWallId], DEFAULT_DOOR_SIZE, [
+    {
+      id: "blocker",
+      wallId: authorWallId,
+      kind: "door",
+      offset: 0,
+      width: 6,
+      height: 2.1,
+      sillHeight: 0,
+    },
+  ]) === null,
+);
+
+useHouseStore.getState().replaceHouse(freshHouse);
+h = houseNow();
+const overlapWallId = roomWallId("room-1", "south");
+const overlapDoorId = model().addOpening({
+  wallId: overlapWallId,
+  kind: "door",
+  offset: 2,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+const overlapping = model().addOpening({
+  wallId: overlapWallId,
+  kind: "door",
+  offset: 2.5,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+check(
+  "addOpening rejects an overlapping opening",
+  overlapDoorId !== null &&
+    overlapping === null &&
+    Object.keys(houseNow().openings).length === 1,
+);
+
+const stackedId = model().addOpening({
+  wallId: overlapWallId,
+  kind: "window",
+  offset: 2.5,
+  width: 0.8,
+  height: 0.6,
+  sillHeight: 2.15,
+});
+h = houseNow();
+const stackedRec = stackedId !== null ? h.openings[stackedId] : undefined;
+const overlapDoorRec = h.openings[overlapDoorId as string];
+check(
+  "window stacked above a door is accepted",
+  stackedRec !== undefined &&
+    overlapDoorRec !== undefined &&
+    !openingsConflict(stackedRec, [overlapDoorRec]),
+);
+check(
+  "stacked window stays within the wall",
+  stackedRec !== undefined &&
+    stackedRec.sillHeight + stackedRec.height <=
+      h.walls[overlapWallId].height + 1e-9,
+);
+
+const forcedSillId = model().addOpening({
+  wallId: overlapWallId,
+  kind: "door",
+  offset: 4.8,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 1.5,
+});
+h = houseNow();
+check(
+  "doors are forced down to floor level",
+  forcedSillId !== null && h.openings[forcedSillId].sillHeight === 0,
+);
+
+useHouseStore.getState().replaceHouse(freshHouse);
+h = houseNow();
+const editWallId = roomWallId("room-1", "south");
+const editDoorA = model().addOpening({
+  wallId: editWallId,
+  kind: "door",
+  offset: 1,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+const editDoorB = model().addOpening({
+  wallId: editWallId,
+  kind: "door",
+  offset: 3,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+check(
+  "two doors added for edit checks",
+  editDoorA !== null && editDoorB !== null,
+);
+
+if (editDoorA !== null) {
+  model().updateOpening(editDoorA, { offset: 4.6 });
+  h = houseNow();
+  check(
+    "updateOpening moves an opening",
+    approx(h.openings[editDoorA].offset, 4.6),
+  );
+
+  model().updateOpening(editDoorA, { offset: 2.5 });
+  h = houseNow();
+  check(
+    "updateOpening refuses a move into a neighbour",
+    approx(h.openings[editDoorA].offset, 4.6),
+  );
+
+  model().updateOpening(editDoorA, { offset: Number.NaN });
+  h = houseNow();
+  check(
+    "updateOpening ignores non-finite patches",
+    approx(h.openings[editDoorA].offset, 4.6),
+  );
+
+  model().updateOpening(editDoorA, { sillHeight: 1.2 });
+  h = houseNow();
+  check(
+    "updateOpening keeps doors on the floor",
+    h.openings[editDoorA].sillHeight === 0,
+  );
+
+  model().updateOpening(editDoorA, { height: 99 });
+  h = houseNow();
+  check(
+    "updateOpening clamps height to the wall",
+    h.openings[editDoorA].height <= h.walls[editWallId].height,
+  );
+
+  model().updateOpening("missing-opening", { offset: 0 });
+  check(
+    "updateOpening on an unknown id is a no-op",
+    houseNow().openings[editDoorA] !== undefined,
+  );
+}
+
+useHouseStore.getState().replaceHouse(freshHouse);
+h = houseNow();
+const resizeWallId = roomWallId("room-1", "south");
+const resizeDoor = model().addOpening({
+  wallId: resizeWallId,
+  kind: "door",
+  offset: 1,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+if (resizeDoor !== null) {
+  model().updateOpening(resizeDoor, { width: 99 });
+  h = houseNow();
+  check(
+    "updateOpening clamps an oversized width",
+    h.openings[resizeDoor].width <= 6 + 1e-9 &&
+      approx(h.openings[resizeDoor].offset, 0),
+  );
+}
+const resizeWinWallId = roomWallId("room-1", "west");
+const resizeWin = model().addOpening({
+  wallId: resizeWinWallId,
+  kind: "window",
+  offset: 2,
+  width: 1.2,
+  height: 1.2,
+  sillHeight: 0.9,
+});
+h = houseNow();
+if (resizeWin !== null) {
+  model().updateOpening(resizeWin, { sillHeight: 1.4 });
+  h = houseNow();
+  check(
+    "updateOpening moves a window sill",
+    approx(h.openings[resizeWin].sillHeight, 1.4),
+  );
+  model().updateOpening(resizeWin, { sillHeight: 99 });
+  h = houseNow();
+  check(
+    "updateOpening clamps an oversized sill",
+    h.openings[resizeWin].sillHeight + h.openings[resizeWin].height <=
+      h.walls[resizeWinWallId].height + 1e-9,
+  );
+}
+
+useHouseStore.getState().replaceHouse(freshHouse);
+h = houseNow();
+model().addOpening({
+  wallId: roomWallId("room-1", "south"),
+  kind: "door",
+  offset: 1,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+model().addOpening({
+  wallId: roomWallId("room-1", "west"),
+  kind: "window",
+  offset: 1,
+  width: 1.2,
+  height: 1.2,
+  sillHeight: 0.9,
+});
+h = houseNow();
+const jsonBefore = JSON.stringify(h);
+const roundTripped = JSON.parse(jsonBefore) as House;
+check("house JSON round-trips exactly", JSON.stringify(roundTripped) === jsonBefore);
+check("every opening survives serialisation", Object.keys(roundTripped.openings).length === 2);
+const serialisedOpening = Object.values(h.openings)[0];
+check(
+  "opening records contain only plain serialisable fields",
+  serialisedOpening !== undefined &&
+    Object.keys(serialisedOpening).sort().join(",") ===
+      "height,id,kind,offset,sillHeight,wallId,width" &&
+    Object.values(serialisedOpening).every(
+      (value) => typeof value === "string" || typeof value === "number",
+    ),
+);
+
+const serialDoor = Object.values(h.openings).find((o) => o.kind === "door");
+const serialDoorWall = h.walls[roomWallId("room-1", "south")];
+if (serialDoor !== undefined) {
+  const frameBoxes = getOpeningFrameBoxes(serialDoorWall, serialDoor);
+  check(
+    "frame boxes are positive and finite",
+    frameBoxes.length > 0 &&
+      frameBoxes.every((b) => b.size.every((v) => Number.isFinite(v) && v > 0)),
+  );
+  check(
+    "frame boxes never overlap each other",
+    rectsDisjoint(frameBoxes.map(boxRect)),
+  );
+}
+
+const synthWall: Wall = {
+  id: "synth",
+  start: { x: 0, z: 0 },
+  end: { x: 6, z: 0 },
+  height: 2.7,
+  thickness: 0.2,
+};
+const synthOpenings: Opening[] = [
+  { id: "o1", wallId: "synth", kind: "door", offset: 1, width: 2, height: 2.1, sillHeight: 0 },
+  { id: "o2", wallId: "synth", kind: "door", offset: 2.5, width: 2, height: 1, sillHeight: 0.5 },
+  { id: "o3", wallId: "synth", kind: "window", offset: 1.5, width: 3, height: 0.5, sillHeight: 2.1 },
+  { id: "o4", wallId: "synth", kind: "window", offset: -1, width: 1.5, height: 1, sillHeight: 0 },
+];
+const synthBoxes = getWallBoxes(synthWall, synthOpenings);
+const synthHoles = getWallHoleRects(synthWall, synthOpenings);
+
+check(
+  "hand-crafted overlapping openings still carve a wall",
+  synthBoxes.length >= 1 && synthHoles.length >= 3,
+);
+check(
+  "holes are clipped into the wall bounds",
+  synthHoles.every(
+    (hole) =>
+      hole.x0 >= -1e-9 &&
+      hole.x1 <= 6 + 1e-9 &&
+      hole.y0 >= -1e-9 &&
+      hole.y1 <= 2.7 + 1e-9,
+  ),
+);
+check(
+  "wall boxes stay disjoint for any input",
+  rectsDisjoint(synthBoxes.map(boxRect)),
+);
+
+let partitionOk = true;
+for (let i = 0; partitionOk && i < 90; i += 1) {
+  const x = 0.03 + i * 0.07;
+  if (x >= 6) break;
+  for (let j = 0; j < 55; j += 1) {
+    const y = 0.017 + j * 0.053;
+    if (y >= 2.7) break;
+    const solidHits = synthBoxes.filter((b) => rectContains(boxRect(b), x, y)).length;
+    const holeHits = synthHoles.filter((hole) => rectContains(hole, x, y)).length;
+    const ok =
+      solidHits === 1 ? holeHits === 0 : solidHits === 0 && holeHits >= 1;
+    if (!ok) {
+      partitionOk = false;
+      break;
+    }
+  }
+}
+check(
+  "solid/hole partition covers the wall exactly (overlapping input)",
+  partitionOk,
+);
+
+const dragWall: Wall = {
+  id: "drag",
+  start: { x: 0, z: 0 },
+  end: { x: 6, z: 0 },
+  height: 2.7,
+  thickness: 0.2,
+};
+const draggedDoor: Opening = {
+  id: "d",
+  wallId: "drag",
+  kind: "door",
+  offset: 2,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+};
+const dragNeighbour: Opening = {
+  id: "n",
+  wallId: "drag",
+  kind: "door",
+  offset: 1,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+};
+const stackedHigh: Opening = {
+  id: "w",
+  wallId: "drag",
+  kind: "window",
+  offset: 0,
+  width: 1,
+  height: 0.5,
+  sillHeight: 2.1,
+};
+
+check(
+  "drag offset follows the pointer with grid snap",
+  approx(resolveOpeningOffset(dragWall, draggedDoor, { x: 3.04, z: 0 }, 0.1, []), 2.6),
+);
+check(
+  "drag stops at the far end of the wall",
+  approx(resolveOpeningOffset(dragWall, draggedDoor, { x: 10, z: 0 }, 0, []), 5.1),
+);
+check(
+  "drag stops flush against a neighbour",
+  approx(
+    resolveOpeningOffset(dragWall, draggedDoor, { x: 1.5, z: 0 }, 0, [dragNeighbour]),
+    1.9,
+  ),
+);
+check(
+  "a window stacked above does not block the drag",
+  approx(
+    resolveOpeningOffset(dragWall, draggedDoor, { x: 1.5, z: 0 }, 0, [stackedHigh]),
+    1.05,
+  ),
+);
+check(
+  "non-finite drag point keeps the current offset",
+  resolveOpeningOffset(
+    dragWall,
+    draggedDoor,
+    { x: Number.NaN, z: 0 },
+    0.1,
+    [],
+  ) === 2,
+);
+
+useHouseStore.getState().replaceHouse(freshHouse);
+h = houseNow();
+const shrinkWallId = roomWallId("room-1", "south");
+const shrinkDoorId = model().addOpening({
+  wallId: shrinkWallId,
+  kind: "door",
+  offset: 2,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+model().setRoomDimensions("room-1", { height: 1.8 });
+h = houseNow();
+const shrinkDoorRec = shrinkDoorId !== null ? h.openings[shrinkDoorId] : undefined;
+check(
+  "door survives a wall-height shrink",
+  shrinkDoorRec !== undefined,
+);
+check(
+  "shrinking the wall re-clamps the door it carries",
+  shrinkDoorRec !== undefined &&
+    shrinkDoorRec.height <= 1.8 + 1e-9 &&
+    shrinkDoorRec.sillHeight === 0,
 );
 
 console.log(failures === 0 ? "\nAll geometry checks passed." : `\n${failures} check(s) FAILED.`);

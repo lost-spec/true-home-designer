@@ -23,6 +23,7 @@ declare global {
       setSnapSize: (value: number) => void;
       getDraggingWallId: () => string | null;
       getDraggingObjectId: () => string | null;
+      getDraggingOpeningId: () => string | null;
       getTool: () => string;
       getPlacingAssetId: () => string | null;
       getGhostPosition: () => { x: number; z: number } | null;
@@ -34,6 +35,7 @@ declare global {
       pickWall: (clientX: number, clientY: number) => string | null;
       pickTop: (clientX: number, clientY: number) => string | null;
       pickObject: (clientX: number, clientY: number) => string | null;
+      pickOpening: (clientX: number, clientY: number) => string | null;
     };
   }
 }
@@ -80,6 +82,7 @@ export function DevBridge() {
       setSnapSize: (value) => useEditorStore.getState().setSnapSize(value),
       getDraggingWallId: () => useEditorStore.getState().draggingWallId,
       getDraggingObjectId: () => useEditorStore.getState().draggingObjectId,
+      getDraggingOpeningId: () => useEditorStore.getState().draggingOpeningId,
       getTool: () => useEditorStore.getState().tool,
       getPlacingAssetId: () => useEditorStore.getState().placingAssetId,
       getGhostPosition: () => useEditorStore.getState().ghostPosition,
@@ -122,6 +125,18 @@ export function DevBridge() {
         while (current) {
           if (current.name.startsWith("object-")) {
             return current.name.slice("object-".length);
+          }
+          current = current.parent;
+        }
+        return null;
+      },
+      pickOpening: (clientX, clientY) => {
+        const hits = castInteractive(clientX, clientY);
+        if (!hits.length) return null;
+        let current: THREE.Object3D | null = hits[0].object;
+        while (current) {
+          if (current.name.startsWith("opening-")) {
+            return current.name.slice("opening-".length);
           }
           current = current.parent;
         }

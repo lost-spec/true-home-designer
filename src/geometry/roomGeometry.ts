@@ -9,6 +9,7 @@ import type {
   WallId,
 } from "../types/house";
 import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_THICKNESS } from "../types/house";
+import { normalizeOpening } from "./openingGeometry";
 
 export type { RoomEdge };
 
@@ -282,8 +283,25 @@ function migrateOpening(
     0,
     Math.max(0, length - opening.width),
   );
-  if (Math.abs(offset - opening.offset) < 1e-9) return opening;
-  return { ...opening, offset };
+
+  // Re-derive every field against the surviving wall: a wall that shrank in
+  // height must also shrink (or floor) the opening it carries.
+  const fields = normalizeOpening(target, opening.kind, {
+    offset,
+    width: opening.width,
+    height: opening.height,
+    sillHeight: opening.sillHeight,
+  });
+  if (!fields) return null;
+  if (
+    fields.offset === opening.offset &&
+    fields.width === opening.width &&
+    fields.height === opening.height &&
+    fields.sillHeight === opening.sillHeight
+  ) {
+    return opening;
+  }
+  return { ...opening, ...fields };
 }
 
 export function reconcile(input: House): House {

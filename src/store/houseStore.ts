@@ -23,15 +23,18 @@ import {
   wallUsers,
   type RoomSpec,
 } from "../geometry/roomGeometry";
-import { getWallPlacement } from "../geometry/wallGeometry";
+import {
+  defaultOpeningSize,
+  findOpeningOffset,
+  normalizeOpening,
+  openingsConflict,
+} from "../geometry/openingGeometry";
 import { normalizeAngle } from "../interaction/objectInteraction";
 
 const MIN_WALL_HEIGHT = 1.5;
 const MAX_WALL_HEIGHT = 6;
 const MIN_WALL_THICKNESS = 0.05;
 const MAX_WALL_THICKNESS = 0.5;
-const MIN_OPENING_WIDTH = 0.3;
-const MIN_OPENING_HEIGHT = 0.4;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -111,6 +114,51 @@ export interface OpeningSpec {
   sillHeight: number;
 }
 
+export interface OpeningPatch {
+  offset?: number;
+  width?: number;
+  height?: number;
+  sillHeight?: number;
+}
+
+/**
+ * Validate and normalise a requested opening against its wall: values are
+ * clamped to what the wall can hold (doors sit on the floor) and the result is
+ * rejected when it would collide with an opening already on that wall.
+ */
+function buildOpening(house: House, spec: OpeningSpec): Opening | null {
+  const wall = house.walls[spec.wallId];
+  if (!wall) return null;
+
+  const fields = normalizeOpening(wall, spec.kind, spec);
+  if (!fields) return null;
+
+  if (openingsConflict(fields, openingsOnWall(house, spec.wallId))) {
+    return null;
+  }
+
+  const id =
+    spec.id !== undefined && !house.openings[spec.id]
+      ? spec.id
+      : nextOpeningId(house, spec.kind);
+
+  return {
+    id,
+    wallId: spec.wallId,
+    kind: spec.kind,
+    offset: fields.offset,
+    width: fields.width,
+    height: fields.height,
+    sillHeight: fields.sillHeight,
+  };
+}
+
+function openingsOnWall(house: House, wallId: WallId): Opening[] {
+  return Object.values(house.openings).filter(
+    (opening) => opening.wallId === wallId,
+  );
+}
+
 export interface HouseState {
   house: House;
   replaceHouse: (house: House) => void;
@@ -120,6 +168,8 @@ export interface HouseState {
   addRoom: (spec?: AddRoomSpec) => RoomId;
   removeRoom: (roomId: RoomId) => void;
   addOpening: (spec: OpeningSpec) => OpeningId | null;
+  createOpening: (wallId: WallId, kind: OpeningKind) => OpeningId | null;
+  updateOpening: (openingId: OpeningId, patch: OpeningPatch) => void;
   removeOpening: (openingId: OpeningId) => void;
   addPlacedObject: (object: PlacedObject) => void;
   updatePlacedObject: (
@@ -290,46 +340,8 @@ export const useHouseStore = create<HouseState>((set, get) => ({
 
   addOpening: (spec) => {
     const house = get().house;
-    const wall = house.walls[spec.wallId];
-    if (!wall) return null;
-    if (
-      ![spec.offset, spec.width, spec.height, spec.sillHeight].every(
-        Number.isFinite,
-      )
-    ) {
-      return null;
-    }
-
-    const { length } = getWallPlacement(wall);
-    if (length <= 1e-4) return null;
-
-    const width = clamp(spec.width, Math.min(MIN_OPENING_WIDTH, length), length);
-    const offset = clamp(spec.offset, 0, length - width);
-    const sillHeight = clamp(
-      spec.sillHeight,
-      0,
-      Math.max(0, wall.height - MIN_OPENING_HEIGHT),
-    );
-    const height = clamp(
-      spec.height,
-      Math.min(MIN_OPENING_HEIGHT, wall.height - sillHeight),
-      wall.height - sillHeight,
-    );
-
-    const id =
-      spec.id !== undefined && !house.openings[spec.id]
-        ? spec.id
-        : nextOpeningId(house, spec.kind);
-
-    const opening: Opening = {
-      id,
-      wallId: spec.wallId,
-      kind: spec.kind,
-      offset,
-      width,
-      height,
-      sillHeight,
-    };
+    const opening = buildOpening(house, spec);
+    if (!opening) return null;
 
     set((state) => ({
       house: {
@@ -340,6 +352,71 @@ export const useHouseStore = create<HouseState>((set, get) => ({
 
     return opening.id;
   },
+
+  createOpening: (wallId, kind) => {
+    const house = get().house;
+    const wall = house.walls[wallId];
+    if (!wall) return null;
+
+    const offset = findOpeningOffset(
+      wall,
+      defaultOpeningSize(kind),
+      openingsOnWall(house, wallId),
+    );
+    if (offset === null) return null;
+
+    const size = defaultOpeningSize(kind);
+    const opening = buildOpening(house, {
+      wallId,
+      kind,
+      offset,
+      width: size.width,
+      height: size.height,
+      sillHeight: size.sillHeight,
+    });
+    if (!opening) return null;
+
+    set((state) => ({
+      house: {
+        ...state.house,
+        openings: { ...state.house.openings, [opening.id]: opening },
+      },
+    }));
+
+    return opening.id;
+  },
+
+  updateOpening: (openingId, patch) =>
+    set((state) => {
+      const existing = state.house.openings[openingId];
+      if (!existing) return state;
+      const wall = state.house.walls[existing.wallId];
+      if (!wall) return state;
+
+      const merged = { ...existing, ...patch };
+      const fields = normalizeOpening(wall, existing.kind, merged);
+      if (!fields) return state;
+
+      const unchanged =
+        fields.offset === existing.offset &&
+        fields.width === existing.width &&
+        fields.height === existing.height &&
+        fields.sillHeight === existing.sillHeight;
+      if (unchanged) return state;
+
+      const siblings = openingsOnWall(state.house, existing.wallId).filter(
+        (opening) => opening.id !== openingId,
+      );
+      if (openingsConflict(fields, siblings)) return state;
+
+      const updated: Opening = { ...existing, ...fields };
+      return {
+        house: {
+          ...state.house,
+          openings: { ...state.house.openings, [openingId]: updated },
+        },
+      };
+    }),
 
   removeOpening: (openingId) =>
     set((state) => {

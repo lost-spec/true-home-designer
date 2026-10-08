@@ -21,6 +21,20 @@ export function Toolbar() {
   const snapSize = useEditorStore((s) => s.snapSize);
   const setSnapSize = useEditorStore((s) => s.setSnapSize);
   const placingAssetId = useEditorStore((s) => s.placingAssetId);
+  const selection = useEditorStore((s) => s.selection);
+
+  const selectedWallId =
+    selection?.kind === "wall"
+      ? selection.id
+      : selection?.kind === "opening"
+        ? useHouseStore.getState().house.openings[selection.id]?.wallId
+        : undefined;
+
+  const addOpening = (kind: "door" | "window") => {
+    if (!selectedWallId) return;
+    const id = useHouseStore.getState().createOpening(selectedWallId, kind);
+    if (id) useEditorStore.getState().select({ kind: "opening", id });
+  };
 
   const createRoom = () => {
     const house = useHouseStore.getState().house;
@@ -77,6 +91,28 @@ export function Toolbar() {
         ))}
         <button onClick={createRoom} title="Add a new room beside the selection">
           Create room
+        </button>
+        <button
+          disabled={!selectedWallId}
+          title={
+            selectedWallId
+              ? "Cut a door opening into the selected wall"
+              : "Select a wall first"
+          }
+          onClick={() => addOpening("door")}
+        >
+          Add door
+        </button>
+        <button
+          disabled={!selectedWallId}
+          title={
+            selectedWallId
+              ? "Cut a window opening into the selected wall"
+              : "Select a wall first"
+          }
+          onClick={() => addOpening("window")}
+        >
+          Add window
         </button>
       </div>
       <div className="toolbar-group">

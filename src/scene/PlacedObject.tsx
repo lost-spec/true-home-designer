@@ -34,6 +34,7 @@ export function PlacedObject({ objectId }: { objectId: string }) {
         event.stopPropagation();
         const state = useEditorStore.getState();
         if (state.draggingObjectId || state.draggingWallId) return;
+        if (state.draggingOpeningId) return;
         if (state.placingAssetId) return;
         select({ kind: "object", id: objectId });
       }}

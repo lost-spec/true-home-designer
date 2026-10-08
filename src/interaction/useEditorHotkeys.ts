@@ -110,6 +110,10 @@ export function useEditorHotkeys() {
           useHouseStore.getState().removePlacedObject(selection.id);
           editor.select(null);
           event.preventDefault();
+        } else if (selection?.kind === "opening") {
+          useHouseStore.getState().removeOpening(selection.id);
+          editor.select(null);
+          event.preventDefault();
         }
       }
     };

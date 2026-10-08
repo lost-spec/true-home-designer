@@ -17,6 +17,7 @@ export default function App() {
   const handlePointerMissed = () => {
     if (useEditorStore.getState().draggingWallId) return;
     if (useEditorStore.getState().draggingObjectId) return;
+    if (useEditorStore.getState().draggingOpeningId) return;
     if (useEditorStore.getState().placingAssetId) return;
     select(null);
   };

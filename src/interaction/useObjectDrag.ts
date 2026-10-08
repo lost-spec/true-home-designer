@@ -33,6 +33,7 @@ export function useObjectDrag(objectId: string) {
       const editor = useEditorStore.getState();
       if (editor.tool !== "select") return;
       if (editor.placingAssetId) return;
+      if (editor.draggingOpeningId) return;
       if (session) session.finish(true);
 
       const object = useHouseStore.getState().house.objects[objectId];
@@ -120,6 +121,7 @@ export function useObjectDrag(objectId: string) {
   const onPointerOver = useCallback(() => {
     const state = useEditorStore.getState();
     if (state.draggingObjectId || state.draggingWallId) return;
+    if (state.draggingOpeningId) return;
     if (state.tool !== "select" || state.placingAssetId) return;
     document.body.style.cursor = "grab";
   }, []);
