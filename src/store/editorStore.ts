@@ -12,6 +12,9 @@ export type Selection =
   | { kind: "object"; id: string }
   | null;
 
+/** Snap sizes offered by the toolbar and accepted by saved designs. */
+export const SNAP_OPTIONS = [0.05, 0.1, 0.25, 0.5] as const;
+
 export interface EditorState {
   tool: Tool;
   selection: Selection;
@@ -28,6 +31,7 @@ export interface EditorState {
   select: (selection: Selection) => void;
   setViewMode: (viewMode: ViewMode) => void;
   toggleCeiling: () => void;
+  setCeilingVisible: (ceilingVisible: boolean) => void;
   setSnapSize: (snapSize: number) => void;
   setDraggingWallId: (wallId: string | null) => void;
   setPlacingAssetId: (assetId: string | null) => void;
@@ -63,6 +67,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   },
   toggleCeiling: () =>
     set((state) => ({ ceilingVisible: !state.ceilingVisible })),
+  setCeilingVisible: (ceilingVisible) => set({ ceilingVisible }),
   setSnapSize: (snapSize) =>
     set({ snapSize: Number.isFinite(snapSize) && snapSize > 0 ? snapSize : 0.1 }),
   setDraggingWallId: (draggingWallId) => set({ draggingWallId }),

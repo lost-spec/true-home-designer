@@ -4,6 +4,12 @@ import * as THREE from "three";
 import { useHouseStore } from "./store/houseStore";
 import { useEditorStore } from "./store/editorStore";
 import { getHistoryFlags } from "./store/history";
+import { currentDesignDocument, loadDesignText } from "./persistence/designIO";
+import { serializeDesign } from "./persistence/houseData";
+import {
+  clearAutosave as clearAutosaveEntry,
+  readAutosave,
+} from "./persistence/designStorage";
 import {
   clientToNdc,
   groundHitFromClient,
@@ -42,6 +48,14 @@ declare global {
       getCanRedo: () => boolean;
       undo: () => void;
       redo: () => void;
+      getDesignJson: () => string;
+      loadDesignJson: (text: string) => {
+        ok: boolean;
+        error: string | null;
+        warnings: string[];
+      };
+      hasAutosave: () => boolean;
+      clearAutosave: () => void;
     };
   }
 }
@@ -153,6 +167,15 @@ export function DevBridge() {
       getCanRedo: () => getHistoryFlags().canRedo,
       undo: () => useHouseStore.getState().undo(),
       redo: () => useHouseStore.getState().redo(),
+      getDesignJson: () => serializeDesign(currentDesignDocument()),
+      loadDesignJson: (text) => {
+        const result = loadDesignText(text);
+        return result.ok
+          ? { ok: true, error: null, warnings: result.warnings }
+          : { ok: false, error: result.error, warnings: [] };
+      },
+      hasAutosave: () => readAutosave() !== null,
+      clearAutosave: () => clearAutosaveEntry(),
     };
 
     return () => {

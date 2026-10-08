@@ -100,6 +100,11 @@ const sampleHouse: House = {
   },
 };
 
+/** A fresh copy of the starting design, used by "New Design". */
+export function createSampleHouse(): House {
+  return JSON.parse(JSON.stringify(sampleHouse)) as House;
+}
+
 export interface RoomDimensionsPatch {
   width?: number;
   depth?: number;

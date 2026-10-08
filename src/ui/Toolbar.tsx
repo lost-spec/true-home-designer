@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from "react";
-import { useEditorStore, type Tool } from "../store/editorStore";
+import { SNAP_OPTIONS, useEditorStore, type Tool } from "../store/editorStore";
 import { useHouseStore } from "../store/houseStore";
 import { getHistoryFlags, subscribeHistory } from "../store/history";
 import { firstWallUser } from "../geometry/roomGeometry";
 import { zoomCamera } from "../interaction/cameraZoom";
+import { DesignControls } from "./DesignControls";
 import type { RoomId } from "../types/house";
 
 const TOOLS: { id: Tool; label: string }[] = [
@@ -12,8 +13,6 @@ const TOOLS: { id: Tool; label: string }[] = [
   { id: "drawWall", label: "Draw wall" },
   { id: "placeObject", label: "Place object" },
 ];
-
-const SNAP_OPTIONS = [0.05, 0.1, 0.25, 0.5];
 
 export function Toolbar() {
   const tool = useEditorStore((s) => s.tool);
@@ -64,6 +63,7 @@ export function Toolbar() {
   return (
     <header className="toolbar">
       <span className="toolbar-title">True Home Designer</span>
+      <DesignControls />
       <div className="toolbar-group">
         <button
           disabled={!history.canUndo}
