@@ -1,5 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Scene } from "./scene/Scene";
+import { FloorPlan2D } from "./plan2d/FloorPlan2D";
 import { Toolbar } from "./ui/Toolbar";
 import { Inspector } from "./ui/Inspector";
 import { AssetPanel } from "./ui/AssetPanel";
@@ -11,6 +12,7 @@ import { assetRegistry } from "./assets/registry";
 export default function App() {
   const select = useEditorStore((s) => s.select);
   const placingAssetId = useEditorStore((s) => s.placingAssetId);
+  const viewMode = useEditorStore((s) => s.viewMode);
 
   useEditorHotkeys();
 
@@ -37,13 +39,15 @@ export default function App() {
             dpr={[1, 2]}
             camera={{ position: [9, 7, 9], fov: 50 }}
             onPointerMissed={handlePointerMissed}
+            style={{ display: viewMode === "3d" ? undefined : "none" }}
           >
             <Scene />
           </Canvas>
+          {viewMode === "2d" ? <FloorPlan2D /> : null}
           {placingAsset ? (
             <div className="placement-hint">
-              Click the floor to place the {placingAsset.name} · R to rotate ·
-              Esc to cancel
+              {viewMode === "2d" ? "Click the plan" : "Click the floor"} to
+              place the {placingAsset.name} · R to rotate · Esc to cancel
             </div>
           ) : null}
         </div>

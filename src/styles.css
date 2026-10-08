@@ -293,3 +293,121 @@ button.danger:hover:not(:disabled) {
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* ---- 2D floor plan -------------------------------------------------
+   The plan svg works in metres (viewBox), so CSS px lengths below are
+   user units and scale with the view. */
+
+.plan2d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  touch-action: none;
+  user-select: none;
+}
+
+.plan2d .plan-room {
+  fill: #1a202b;
+}
+
+.plan2d .plan-room:hover {
+  fill: #1e2532;
+}
+
+.plan2d .plan-room.selected {
+  fill: rgba(91, 156, 255, 0.14);
+}
+
+.plan2d .plan-wall {
+  fill: none;
+  stroke: #cfd6e0;
+  stroke-linecap: butt;
+  cursor: grab;
+}
+
+.plan2d .plan-wall:hover {
+  stroke: #eef2f8;
+}
+
+.plan2d .plan-wall.selected {
+  stroke: var(--accent);
+}
+
+.plan2d .plan-opening {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.plan2d .plan-opening.selected {
+  fill: rgba(91, 156, 255, 0.45);
+}
+
+.plan2d .plan-window {
+  fill: rgba(168, 220, 255, 0.35);
+  stroke: #a8dcff;
+  stroke-width: 0.03px;
+  pointer-events: none;
+}
+
+.plan2d .plan-door-leaf {
+  stroke: #d9a05b;
+  stroke-width: 0.07px;
+  pointer-events: none;
+}
+
+.plan2d .plan-door-arc {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 0.03px;
+  stroke-dasharray: 0.12px 0.08px;
+  pointer-events: none;
+}
+
+.plan2d .plan-object {
+  fill: #2c3442;
+  stroke: var(--muted);
+  stroke-width: 0.03px;
+  cursor: grab;
+}
+
+.plan2d .plan-object:hover {
+  stroke: #c3cad6;
+}
+
+.plan2d .plan-object.selected {
+  fill: rgba(91, 156, 255, 0.35);
+  stroke: var(--accent);
+}
+
+.plan2d .plan-ghost {
+  fill: rgba(91, 156, 255, 0.16);
+  stroke: var(--accent);
+  stroke-width: 0.05px;
+  stroke-dasharray: 0.22px 0.14px;
+  pointer-events: none;
+}
+
+.plan2d .plan-label {
+  fill: var(--muted);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.plan2d.dragging,
+.plan2d.dragging .plan-wall,
+.plan2d.dragging .plan-object {
+  cursor: grabbing;
+}
+
+.plan2d.placing,
+.plan2d.placing .plan-room,
+.plan2d.placing .plan-wall,
+.plan2d.placing .plan-opening,
+.plan2d.placing .plan-object {
+  cursor: crosshair;
+}

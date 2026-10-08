@@ -204,6 +204,14 @@ check("leaving placement mode resets ghost and rotation", (() => {
     !isPlacementActive(state);
 })());
 
+check("editor starts in the 3D view", editor().viewMode === "3d");
+editor().setViewMode("2d");
+check("view mode switches to the 2D plan", editor().viewMode === "2d");
+editor().setViewMode("bogus" as never);
+check("invalid view mode values are ignored", editor().viewMode === "2d");
+editor().setViewMode("3d");
+check("view mode switches back to the 3D view", editor().viewMode === "3d");
+
 editor().select({ kind: "object", id: second });
 check("objects are selectable through the editor store", editor().selection?.kind === "object" && editor().selection.id === second);
 editor().select(null);

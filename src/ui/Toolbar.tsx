@@ -22,6 +22,8 @@ export function Toolbar() {
   const setSnapSize = useEditorStore((s) => s.setSnapSize);
   const placingAssetId = useEditorStore((s) => s.placingAssetId);
   const selection = useEditorStore((s) => s.selection);
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
 
   const selectedWallId =
     selection?.kind === "wall"
@@ -114,6 +116,16 @@ export function Toolbar() {
         >
           Add window
         </button>
+        <button
+          onClick={() => setViewMode(viewMode === "3d" ? "2d" : "3d")}
+          title={
+            viewMode === "3d"
+              ? "Switch to the 2D floor plan"
+              : "Switch back to the 3D view"
+          }
+        >
+          {viewMode === "3d" ? "2D plan" : "3D view"}
+        </button>
       </div>
       <div className="toolbar-group">
         <label className="toolbar-snap">
@@ -133,16 +145,37 @@ export function Toolbar() {
         <button
           className={ceilingVisible ? "active" : ""}
           onClick={toggleCeiling}
-          title="Toggle ceiling visibility"
+          disabled={viewMode !== "3d"}
+          title={
+            viewMode === "3d"
+              ? "Toggle ceiling visibility"
+              : "Ceiling control is available in the 3D view"
+          }
         >
           {ceilingVisible ? "Hide ceiling" : "Show ceiling"}
         </button>
       </div>
       <div className="toolbar-group">
-        <button onClick={() => zoomCamera(1)} title="Zoom the view in ( + )">
+        <button
+          onClick={() => zoomCamera(1)}
+          disabled={viewMode !== "3d"}
+          title={
+            viewMode === "3d"
+              ? "Zoom the view in ( + )"
+              : "Zoom is available in the 3D view"
+          }
+        >
           Zoom in
         </button>
-        <button onClick={() => zoomCamera(-1)} title="Zoom the view out ( − )">
+        <button
+          onClick={() => zoomCamera(-1)}
+          disabled={viewMode !== "3d"}
+          title={
+            viewMode === "3d"
+              ? "Zoom the view out ( − )"
+              : "Zoom is available in the 3D view"
+          }
+        >
           Zoom out
         </button>
       </div>

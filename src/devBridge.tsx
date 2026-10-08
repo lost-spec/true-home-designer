@@ -25,6 +25,7 @@ declare global {
       getDraggingObjectId: () => string | null;
       getDraggingOpeningId: () => string | null;
       getTool: () => string;
+      getViewMode: () => string;
       getPlacingAssetId: () => string | null;
       getGhostPosition: () => { x: number; z: number } | null;
       getPlacingRotationY: () => number;
@@ -84,6 +85,7 @@ export function DevBridge() {
       getDraggingObjectId: () => useEditorStore.getState().draggingObjectId,
       getDraggingOpeningId: () => useEditorStore.getState().draggingOpeningId,
       getTool: () => useEditorStore.getState().tool,
+      getViewMode: () => useEditorStore.getState().viewMode,
       getPlacingAssetId: () => useEditorStore.getState().placingAssetId,
       getGhostPosition: () => useEditorStore.getState().ghostPosition,
       getPlacingRotationY: () => useEditorStore.getState().placingRotationY,

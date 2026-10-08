@@ -20,6 +20,18 @@ import {
   type BoxSpec,
 } from "../src/geometry/wallGeometry";
 import {
+  doorPlanGeometry,
+  objectPlanRect,
+  openingPlanQuad,
+  planViewBox,
+  planToWorld,
+  roomPlanRect,
+  wallPlanLine,
+  wallPlanSegments,
+  worldToPlan,
+} from "../src/geometry/planGeometry";
+import type { AssetMetadata } from "../src/assets/types";
+import {
   DEFAULT_DOOR_SIZE,
   findOpeningOffset,
   openingsConflict,
@@ -1204,6 +1216,226 @@ check(
   shrinkDoorRec !== undefined &&
     shrinkDoorRec.height <= 1.8 + 1e-9 &&
     shrinkDoorRec.sillHeight === 0,
+);
+
+// ---- 2D floor-plan projection -----------------------------------------
+
+useHouseStore.getState().replaceHouse(freshHouse);
+h = houseNow();
+
+const planSouthWall = h.walls[roomWallId("room-1", "south")];
+check(
+  "worldToPlan flips world z onto screen y (north up)",
+  approx(worldToPlan(3, -2.5).x, 3) && approx(worldToPlan(3, -2.5).y, 2.5),
+);
+check(
+  "planToWorld inverts worldToPlan",
+  (() => {
+    const plan = worldToPlan(1.5, -4);
+    const world = planToWorld(plan.x, plan.y);
+    return approx(world.x, 1.5) && approx(world.z, -4);
+  })(),
+);
+check(
+  "roomPlanRect frames the room in plan space",
+  (() => {
+    const rect = roomPlanRect(h.rooms["room-1"]);
+    return (
+      approx(rect.x, -3) &&
+      approx(rect.y, -2.5) &&
+      approx(rect.width, 6) &&
+      approx(rect.height, 5)
+    );
+  })(),
+);
+check(
+  "wallPlanLine follows the south wall",
+  (() => {
+    const line = wallPlanLine(h.walls[roomWallId("room-1", "south")]);
+    return (
+      approx(line.x1, -3) &&
+      approx(line.y1, 2.5) &&
+      approx(line.x2, 3) &&
+      approx(line.y2, 2.5)
+    );
+  })(),
+);
+check(
+  "wallPlanSegments without openings is one full run",
+  (() => {
+    const segments = wallPlanSegments(planSouthWall, []);
+    return (
+      segments.length === 1 &&
+      approx(Math.hypot(segments[0].x2 - segments[0].x1, segments[0].y2 - segments[0].y1), 6)
+    );
+  })(),
+);
+
+const planDoorId = model().addOpening({
+  wallId: roomWallId("room-1", "south"),
+  kind: "door",
+  offset: 1,
+  width: 0.9,
+  height: 2.1,
+  sillHeight: 0,
+});
+h = houseNow();
+const planDoor = planDoorId !== null ? h.openings[planDoorId] : undefined;
+const planSouthWithDoor = h.walls[roomWallId("room-1", "south")];
+check("plan fixture door exists", planDoor !== undefined);
+check(
+  "wallPlanSegments splits around the door hole",
+  (() => {
+    if (!planDoor || !planSouthWithDoor) return false;
+    const segments = wallPlanSegments(planSouthWithDoor, [planDoor]);
+    if (segments.length !== 2) return false;
+    const gapStart = segments[0].x2;
+    const gapEnd = segments[1].x1;
+    return approx(gapStart, -2) && approx(gapEnd, -1.1) && approx(gapEnd - gapStart, 0.9);
+  })(),
+);
+check(
+  "openingPlanQuad spans the clipped offset and wall thickness",
+  (() => {
+    if (!planDoor || !planSouthWithDoor) return false;
+    const quad = openingPlanQuad(planSouthWithDoor, planDoor);
+    if (quad.length !== 4) return false;
+    const xs = quad.map((point) => point.x);
+    const ys = quad.map((point) => point.y);
+    return (
+      approx(Math.min(...xs), -2) &&
+      approx(Math.max(...xs), -1.1) &&
+      approx(Math.min(...ys), 2.4) &&
+      approx(Math.max(...ys), 2.6)
+    );
+  })(),
+);
+check(
+  "doorPlanGeometry swings the leaf into the room",
+  (() => {
+    if (!planDoor || !planSouthWithDoor) return false;
+    const door = doorPlanGeometry(planSouthWithDoor, planDoor);
+    if (!door) return false;
+    return (
+      approx(door.hinge.x, -2) &&
+      approx(door.hinge.y, 2.5) &&
+      approx(door.jamb.x, -1.1) &&
+      approx(door.jamb.y, 2.5) &&
+      approx(door.tip.x, -2) &&
+      approx(door.tip.y, 1.6) &&
+      door.sweep === 0
+    );
+  })(),
+);
+check(
+  "plan segments ignore holes outside the wall height",
+  (() => {
+    if (!planSouthWithDoor) return false;
+    const farAbove: Opening = {
+      id: "plan-far-above",
+      wallId: planSouthWithDoor.id,
+      kind: "window",
+      offset: 1,
+      width: 0.9,
+      height: 0.1,
+      sillHeight: 99,
+    };
+    const segments = wallPlanSegments(planSouthWithDoor, [farAbove]);
+    return (
+      segments.length === 1 &&
+      approx(Math.hypot(segments[0].x2 - segments[0].x1, segments[0].y2 - segments[0].y1), 6)
+    );
+  })(),
+);
+check(
+  "degenerate wall has no plan segments",
+  wallPlanSegments(
+    { id: "plan-degenerate", start: { x: 0, z: 0 }, end: { x: 0, z: 0 }, height: 2.7, thickness: 0.2 },
+    [],
+  ).length === 0,
+);
+check(
+  "zero-width opening yields no quad or swing",
+  (() => {
+    if (!planDoor || !planSouthWithDoor) return false;
+    const degenerate = { ...planDoor, offset: 1, width: 0 };
+    return (
+      openingPlanQuad(planSouthWithDoor, degenerate).length === 0 &&
+      doorPlanGeometry(planSouthWithDoor, degenerate) === null
+    );
+  })(),
+);
+
+const planObject = { position: { x: 1, y: 0, z: 2 }, rotationY: 0, scale: 1 };
+check(
+  "objectPlanRect defaults to a unit footprint centred in plan",
+  (() => {
+    const footprint = objectPlanRect(planObject);
+    return (
+      approx(footprint.cx, 1) &&
+      approx(footprint.cy, -2) &&
+      approx(footprint.width, 1) &&
+      approx(footprint.height, 1) &&
+      approx(footprint.rotationDeg, 0)
+    );
+  })(),
+);
+check(
+  "objectPlanRect scales the footprint",
+  (() => {
+    const footprint = objectPlanRect({ ...planObject, scale: 2 });
+    return approx(footprint.width, 2) && approx(footprint.height, 2);
+  })(),
+);
+check(
+  "objectPlanRect rotates the footprint offset with the object",
+  (() => {
+    const planAsset = {
+      assetId: "plan-fixture",
+      name: "Plan Fixture",
+      category: "furniture",
+      modelPath: "",
+      dimensions: { width: 2, height: 1, depth: 1 },
+      footprintOffset: { x: 1, z: 0 },
+      allowRotation: true,
+      allowScaling: true,
+    } satisfies AssetMetadata;
+    const footprint = objectPlanRect(
+      { ...planObject, rotationY: Math.PI / 2 },
+      planAsset,
+    );
+    return (
+      approx(footprint.cx, 1) &&
+      approx(footprint.cy, -1) &&
+      approx(footprint.width, 2) &&
+      approx(footprint.height, 1) &&
+      approx(footprint.rotationDeg, 90)
+    );
+  })(),
+);
+check(
+  "planViewBox frames every room plus the requested padding",
+  (() => {
+    const box = planViewBox([h.rooms["room-1"]], 4);
+    return (
+      approx(box.x, -7) &&
+      approx(box.y, -6.5) &&
+      approx(box.width, 14) &&
+      approx(box.height, 13)
+    );
+  })(),
+);
+check(
+  "planViewBox falls back to a usable box with no rooms",
+  (() => {
+    const box = planViewBox([], 4);
+    return (
+      box.width > 0 &&
+      box.height > 0 &&
+      Number.isFinite(box.x) &&
+      Number.isFinite(box.y)
+    );
+  })(),
 );
 
 console.log(failures === 0 ? "\nAll geometry checks passed." : `\n${failures} check(s) FAILED.`);

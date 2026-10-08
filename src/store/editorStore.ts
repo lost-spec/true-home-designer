@@ -3,6 +3,8 @@ import type { Vec2 } from "../types/house";
 
 export type Tool = "select" | "drawRoom" | "drawWall" | "placeObject";
 
+export type ViewMode = "3d" | "2d";
+
 export type Selection =
   | { kind: "wall"; id: string }
   | { kind: "room"; id: string }
@@ -13,6 +15,7 @@ export type Selection =
 export interface EditorState {
   tool: Tool;
   selection: Selection;
+  viewMode: ViewMode;
   ceilingVisible: boolean;
   snapSize: number;
   draggingWallId: string | null;
@@ -23,6 +26,7 @@ export interface EditorState {
   draggingOpeningId: string | null;
   setTool: (tool: Tool) => void;
   select: (selection: Selection) => void;
+  setViewMode: (viewMode: ViewMode) => void;
   toggleCeiling: () => void;
   setSnapSize: (snapSize: number) => void;
   setDraggingWallId: (wallId: string | null) => void;
@@ -42,6 +46,7 @@ const IDLE_PLACEMENT = {
 export const useEditorStore = create<EditorState>((set) => ({
   tool: "select",
   selection: null,
+  viewMode: "3d",
   ceilingVisible: true,
   snapSize: 0.1,
   draggingWallId: null,
@@ -52,6 +57,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   draggingOpeningId: null,
   setTool: (tool) => set({ tool, ...IDLE_PLACEMENT }),
   select: (selection) => set({ selection }),
+  setViewMode: (viewMode) => {
+    if (viewMode !== "3d" && viewMode !== "2d") return;
+    set({ viewMode });
+  },
   toggleCeiling: () =>
     set((state) => ({ ceilingVisible: !state.ceilingVisible })),
   setSnapSize: (snapSize) =>
