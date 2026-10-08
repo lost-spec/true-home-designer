@@ -1,5 +1,6 @@
 import { ASSET_CATEGORIES, type AssetCategory, type AssetMetadata } from "./types";
 import { ASSET_CATALOG } from "./catalog";
+import { validateMaterialSlots } from "./materialSlots";
 
 export interface AssetRegistry {
   get: (assetId: string) => AssetMetadata | undefined;
@@ -30,6 +31,10 @@ export function createAssetRegistry(
     const { width, height, depth } = asset.dimensions;
     if (!(width > 0 && height > 0 && depth > 0)) {
       throw new Error(`asset ${asset.assetId} has invalid dimensions`);
+    }
+    const slotErrors = validateMaterialSlots(asset.assetId, asset.materialSlots);
+    if (slotErrors.length > 0) {
+      throw new Error(`asset ${asset.assetId} material slots: ${slotErrors[0]}`);
     }
   }
 

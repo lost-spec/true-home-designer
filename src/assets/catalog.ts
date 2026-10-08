@@ -1,4 +1,16 @@
 import type { AssetMetadata } from "./types";
+import {
+  FABRIC_FINISHES,
+  METAL_FINISHES,
+  PAINT_FINISHES,
+  PALETTE_ACCENTS,
+  PALETTE_DARKS,
+  PALETTE_FABRICS,
+  PALETTE_METALS,
+  PALETTE_NEUTRALS,
+  PALETTE_WOODS,
+  WOOD_FINISHES,
+} from "./palettes";
 
 export const ASSET_CATALOG: readonly AssetMetadata[] = [
   {
@@ -10,6 +22,27 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: -2.6, z: 0 },
     allowRotation: true,
     allowScaling: true,
+    materialSlots: [
+      {
+        id: "fabric",
+        label: "Upholstery",
+        originalColor: "#ce896f",
+        targets: [
+          { name: "MAT_Fabric_Base" },
+          { name: "MAT_Fabric_Shadow", color: "#b8735d" },
+        ],
+        palette: PALETTE_FABRICS,
+        finishes: FABRIC_FINISHES,
+      },
+      {
+        id: "legs",
+        label: "Legs",
+        originalColor: "#ffffff",
+        targets: [{ name: "MAT_Wood_Base" }],
+        palette: PALETTE_WOODS,
+        finishes: WOOD_FINISHES,
+      },
+    ],
   },
   {
     assetId: "racing_gaming_chair",
@@ -20,6 +53,46 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: -0.01, z: 0.04 },
     allowRotation: true,
     allowScaling: true,
+    materialSlots: [
+      {
+        id: "upholstery",
+        label: "Upholstery",
+        originalColor: "#101012",
+        targets: [
+          { name: "COLOR_body_main" },
+          { name: "COLOR_pillows", color: "#121214" },
+          { name: "COLOR_base", color: "#131315" },
+          { name: "COLOR_armrest_pad", color: "#141416" },
+          { name: "COLOR_straps", color: "#161616" },
+        ],
+        palette: PALETTE_DARKS,
+        finishes: FABRIC_FINISHES,
+      },
+      {
+        id: "accent",
+        label: "Accent",
+        originalColor: "#6e0b0b",
+        targets: [
+          { name: "COLOR_body_secondary" },
+          { name: "COLOR_accent", color: "#b01212" },
+          { name: "COLOR_piping", color: "#c21616" },
+          { name: "COLOR_stitching", color: "#d41a1a" },
+        ],
+        palette: PALETTE_ACCENTS,
+        finishes: FABRIC_FINISHES,
+      },
+      {
+        id: "frame",
+        label: "Frame",
+        originalColor: "#b5b5bc",
+        targets: [
+          { name: "COLOR_metal_tint" },
+          { name: "COLOR_chrome", color: "#eeeeee" },
+        ],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+    ],
   },
   {
     assetId: "modern_table",
@@ -30,6 +103,32 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: 0, z: 0 },
     allowRotation: true,
     allowScaling: true,
+    materialSlots: [
+      {
+        id: "top",
+        label: "Table top",
+        originalColor: "#d7c4aa",
+        targets: [{ name: "MAT_Wood_Oak" }],
+        palette: PALETTE_WOODS,
+        finishes: WOOD_FINISHES,
+      },
+      {
+        id: "frame",
+        label: "Frame",
+        originalColor: "#5d5f63",
+        targets: [{ name: "MAT_Metal_Anthracite" }],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+      {
+        id: "feet",
+        label: "Foot pads",
+        originalColor: "#edd490",
+        targets: [{ name: "MAT_Metal_Brass" }],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+    ],
   },
   {
     assetId: "bed",
@@ -40,6 +139,40 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: 0, z: 0.01 },
     allowRotation: true,
     allowScaling: true,
+    materialSlots: [
+      {
+        id: "frame",
+        label: "Frame",
+        originalColor: "#ffffff",
+        targets: [{ name: "MAT_Wood_Walnut" }],
+        palette: PALETTE_WOODS,
+        finishes: WOOD_FINISHES,
+      },
+      {
+        id: "headboard",
+        label: "Headboard",
+        originalColor: "#ffffff",
+        targets: [{ name: "MAT_Fabric_Headboard" }],
+        palette: PALETTE_FABRICS,
+        finishes: FABRIC_FINISHES,
+      },
+      {
+        id: "bedding",
+        label: "Bedding",
+        originalColor: "#ffffff",
+        targets: [{ name: "MAT_Fabric_Stone_Greige" }],
+        palette: PALETTE_FABRICS,
+        finishes: FABRIC_FINISHES,
+      },
+      {
+        id: "linens",
+        label: "Mattress & pillows",
+        originalColor: "#ffffff",
+        targets: [{ name: "MAT_Fabric_Linen_White" }],
+        palette: PALETTE_NEUTRALS,
+        finishes: FABRIC_FINISHES,
+      },
+    ],
   },
   {
     assetId: "modern_closet",
@@ -50,6 +183,32 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: 0, z: -0.01 },
     allowRotation: true,
     allowScaling: false,
+    materialSlots: [
+      {
+        id: "body",
+        label: "Body",
+        originalColor: "#d4c2aa",
+        targets: [{ name: "MAT_Wood_LightOak" }],
+        palette: PALETTE_WOODS,
+        finishes: WOOD_FINISHES,
+      },
+      {
+        id: "handles",
+        label: "Handles & plinth",
+        originalColor: "#595b5f",
+        targets: [{ name: "MAT_Metal_Anthracite" }],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+      {
+        id: "interior",
+        label: "Interior",
+        originalColor: "#957c65",
+        targets: [{ name: "MAT_Wood_Walnut" }],
+        palette: PALETTE_WOODS,
+        finishes: WOOD_FINISHES,
+      },
+    ],
   },
   {
     assetId: "cabinet",
@@ -60,6 +219,32 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: 0, z: 0.01 },
     allowRotation: true,
     allowScaling: true,
+    materialSlots: [
+      {
+        id: "body",
+        label: "Body",
+        originalColor: "#f3f0e6",
+        targets: [{ name: "MAT_Paint_Cream" }],
+        palette: PALETTE_NEUTRALS,
+        finishes: PAINT_FINISHES,
+      },
+      {
+        id: "legs",
+        label: "Legs",
+        originalColor: "#ffffff",
+        targets: [{ name: "MAT_Wood_Oak" }],
+        palette: PALETTE_WOODS,
+        finishes: WOOD_FINISHES,
+      },
+      {
+        id: "hardware",
+        label: "Handles",
+        originalColor: "#edce90",
+        targets: [{ name: "MAT_Metal_Brass" }],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+    ],
   },
   {
     assetId: "fridge",
@@ -70,6 +255,24 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: 0, z: 0.03 },
     allowRotation: true,
     allowScaling: false,
+    materialSlots: [
+      {
+        id: "body",
+        label: "Body",
+        originalColor: "#dbdddf",
+        targets: [{ name: "MAT_Metal_Stainless" }],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+      {
+        id: "trim",
+        label: "Trim & display",
+        originalColor: "#2c2c2f",
+        targets: [{ name: "MAT_Plastic_Black" }],
+        palette: PALETTE_DARKS,
+        finishes: PAINT_FINISHES,
+      },
+    ],
   },
   {
     assetId: "modern_tv",
@@ -80,6 +283,24 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: 0, z: 0 },
     allowRotation: true,
     allowScaling: false,
+    materialSlots: [
+      {
+        id: "body",
+        label: "Body",
+        originalColor: "#2f2f32",
+        targets: [{ name: "MAT_TV_Black" }],
+        palette: PALETTE_DARKS,
+        finishes: PAINT_FINISHES,
+      },
+      {
+        id: "stand",
+        label: "Stand & neck",
+        originalColor: "#6f6f71",
+        targets: [{ name: "MAT_TV_Metal" }],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+    ],
   },
   {
     assetId: "round_clock",
@@ -90,6 +311,31 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: 0, z: 0.01 },
     allowRotation: true,
     allowScaling: false,
+    materialSlots: [
+      {
+        id: "case",
+        label: "Case & bezel",
+        originalColor: "#35363a",
+        targets: [{ name: "MAT_Metal_BrushedDark" }],
+        palette: PALETTE_METALS,
+        finishes: METAL_FINISHES,
+      },
+      {
+        id: "dial",
+        label: "Dial",
+        originalColor: "#f3f2ed",
+        targets: [{ name: "MAT_Dial_White" }],
+        palette: PALETTE_NEUTRALS,
+        finishes: PAINT_FINISHES,
+      },
+      {
+        id: "accent",
+        label: "Second hand",
+        originalColor: "#dd3035",
+        targets: [{ name: "MAT_Accent_Red" }],
+        palette: PALETTE_ACCENTS,
+      },
+    ],
   },
   {
     assetId: "test_crate",
@@ -100,5 +346,15 @@ export const ASSET_CATALOG: readonly AssetMetadata[] = [
     footprintOffset: { x: -0.25, z: -0.25 },
     allowRotation: true,
     allowScaling: false,
+    materialSlots: [
+      {
+        id: "wood",
+        label: "Wood",
+        originalColor: "#ceaa81",
+        targets: [{ name: "CrateWood" }],
+        palette: PALETTE_WOODS,
+        finishes: WOOD_FINISHES,
+      },
+    ],
   },
 ];

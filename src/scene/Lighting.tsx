@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { useThree } from "@react-three/fiber";
-import { Environment } from "@react-three/drei";
+import { ContactShadows, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { useHouseStore } from "../store/houseStore";
 import { assetRegistry } from "../assets/registry";
@@ -14,7 +14,7 @@ const SUN_INTENSITY = 2.6;
 
 const SHADOW_MAP_SIZE = 2048;
 const SHADOW_PADDING = 2.5;
-const SHADOW_RADIUS = 3;
+const SHADOW_RADIUS = 9;
 const SHADOW_BIAS = -0.0003;
 const SHADOW_NORMAL_BIAS = 0.02;
 const SUN_DISTANCE_PADDING = 12;
@@ -163,6 +163,22 @@ export function Lighting() {
   }, [gl]);
 
   const bounds = useMemo(() => computeSceneBounds(), [rooms, objects]);
+  const contact = useMemo(() => {
+    const center = bounds.getCenter(new THREE.Vector3());
+    const size = bounds.getSize(new THREE.Vector3());
+    return { x: center.x, z: center.z, w: Math.max(size.x, 4), d: Math.max(size.z, 4) };
+  }, [bounds]);
+
+  // ContactShadows recreates its render targets whenever its `scale` prop
+  // changes identity, and Lighting re-renders on every object edit. Keep a
+  // stable, metre-quantised tuple so resource recreation only happens when the
+  // scene bounds genuinely cross a metre boundary.
+  const contactScale = useRef<[number, number]>([4, 4]);
+  const scaleW = Math.ceil(contact.w);
+  const scaleD = Math.ceil(contact.d);
+  if (contactScale.current[0] !== scaleW || contactScale.current[1] !== scaleD) {
+    contactScale.current = [scaleW, scaleD];
+  }
 
   useLayoutEffect(() => {
     const sun = sunRef.current;
@@ -207,6 +223,14 @@ export function Lighting() {
   return (
     <group>
       <Environment map={skyTexture} />
+      <ContactShadows
+        position={[contact.x, 0.035, contact.z]}
+        scale={contactScale.current}
+        resolution={512}
+        blur={2.5}
+        far={0.6}
+        opacity={0.45}
+      />
       <primitive object={sunTarget} />
       <directionalLight
         ref={sunRef}

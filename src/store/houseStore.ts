@@ -30,6 +30,7 @@ import {
   openingsConflict,
 } from "../geometry/openingGeometry";
 import { normalizeAngle } from "../interaction/objectInteraction";
+import { withSlotColor, withSlotFinish } from "../assets/materialSlots";
 import {
   recordHouseChange,
   suppressHistory,
@@ -189,6 +190,11 @@ export interface HouseState {
     patch: Partial<Omit<PlacedObject, "id">>,
   ) => void;
   removePlacedObject: (id: ObjectId) => void;
+  setMaterialOverride: (
+    id: ObjectId,
+    slotId: string,
+    patch: { color?: string | null; finish?: string | null },
+  ) => void;
   createPlacedObject: (
     assetId: string,
     position: { x: number; z: number },
@@ -504,6 +510,31 @@ export const useHouseStore = create<HouseState>((rawSet, get) => {
       const objects = { ...state.house.objects };
       delete objects[id];
       return { house: { ...state.house, objects } };
+    }),
+
+  setMaterialOverride: (id, slotId, patch) =>
+    set((state) => {
+      const existing = state.house.objects[id];
+      if (!existing) return state;
+
+      let overrides = existing.materialOverrides;
+      if (patch.color !== undefined) {
+        overrides = withSlotColor(overrides, slotId, patch.color);
+      }
+      if (patch.finish !== undefined) {
+        overrides = withSlotFinish(overrides, slotId, patch.finish);
+      }
+      if (overrides === existing.materialOverrides) return state;
+
+      const updated: PlacedObject = { ...existing };
+      if (overrides) updated.materialOverrides = overrides;
+      else delete updated.materialOverrides;
+      return {
+        house: {
+          ...state.house,
+          objects: { ...state.house.objects, [id]: updated },
+        },
+      };
     }),
 
   createPlacedObject: (assetId, position, rotationY = 0) => {

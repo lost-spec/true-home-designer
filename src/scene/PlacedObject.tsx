@@ -39,7 +39,7 @@ export function PlacedObject({ objectId }: { objectId: string }) {
         select({ kind: "object", id: objectId });
       }}
     >
-      <AssetModel assetId={object.assetId} />
+      <AssetModel assetId={object.assetId} overrides={object.materialOverrides} />
       {isSelected && (
         <mesh
           position={[0, 0.02 - object.position.y, 0]}

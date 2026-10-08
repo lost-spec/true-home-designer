@@ -8,6 +8,7 @@ import {
   MIN_OPENING_WIDTH,
 } from "../geometry/openingGeometry";
 import { assetRegistry } from "../assets/registry";
+import { MaterialCustomizer } from "./MaterialCustomizer";
 import { rotateObjectY, stepObjectElevation, zoomObjectScale, MAX_OBJECT_ELEVATION, MIN_OBJECT_ELEVATION, MAX_OBJECT_SCALE, MIN_OBJECT_SCALE } from "../interaction/objectInteraction";
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -255,6 +256,7 @@ export function Inspector() {
       />
       <Row label="Scale" value={`${object.scale.toFixed(2)}×`} />
       <Row label="Can rotate" value={allowRotation ? "Yes" : "No"} />
+      <MaterialCustomizer objectId={object.id} assetId={object.assetId} />
       <div className="inspector-actions">
         <button
           disabled={object.position.y >= MAX_OBJECT_ELEVATION}

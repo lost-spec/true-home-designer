@@ -28,6 +28,8 @@ import type {
   RoomEdge,
   Wall,
 } from "../types/house";
+import type { MaterialOverrides } from "../assets/types";
+import { normalizeHex } from "../assets/materialSlots";
 import {
   DEFAULT_WALL_HEIGHT,
   DEFAULT_WALL_THICKNESS,
@@ -367,6 +369,81 @@ function sanitizeOpening(
   };
 }
 
+function sanitizeMaterialOverrides(
+  raw: unknown,
+  assetId: string,
+  path: string,
+  issues: Issues,
+): MaterialOverrides | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isRecord(raw)) {
+    issues.warnings.push(`${path}.materialOverrides must be an object; ignored`);
+    return undefined;
+  }
+
+  const asset = assetRegistry.get(assetId);
+  const slots = asset?.materialSlots;
+  const colors: Record<string, string> = {};
+  const finishes: Record<string, string> = {};
+
+  if (raw.colors !== undefined) {
+    if (!isRecord(raw.colors)) {
+      issues.warnings.push(`${path}.materialOverrides.colors must be an object; ignored`);
+    } else {
+      for (const [slotId, value] of Object.entries(raw.colors)) {
+        if (slots && !slots.some((slot) => slot.id === slotId)) {
+          issues.warnings.push(
+            `${path}.materialOverrides.colors references unknown slot "${slotId}"; dropped`,
+          );
+          continue;
+        }
+        const hex = normalizeHex(value);
+        if (hex === null) {
+          issues.warnings.push(
+            `${path}.materialOverrides.colors.${slotId} must be a #rrggbb colour; dropped`,
+          );
+          continue;
+        }
+        colors[slotId] = hex;
+      }
+    }
+  }
+
+  if (raw.finishes !== undefined) {
+    if (!isRecord(raw.finishes)) {
+      issues.warnings.push(`${path}.materialOverrides.finishes must be an object; ignored`);
+    } else {
+      for (const [slotId, value] of Object.entries(raw.finishes)) {
+        const slot = slots?.find((candidate) => candidate.id === slotId);
+        if (slots && !slot) {
+          issues.warnings.push(
+            `${path}.materialOverrides.finishes references unknown slot "${slotId}"; dropped`,
+          );
+          continue;
+        }
+        if (typeof value !== "string" || value.length === 0) {
+          issues.warnings.push(
+            `${path}.materialOverrides.finishes.${slotId} must be a string; dropped`,
+          );
+          continue;
+        }
+        if (slot && !slot.finishes?.some((finish) => finish.id === value)) {
+          issues.warnings.push(
+            `${path}.materialOverrides.finishes.${slotId} references unknown finish "${value}"; dropped`,
+          );
+          continue;
+        }
+        finishes[slotId] = value;
+      }
+    }
+  }
+
+  const overrides: MaterialOverrides = {};
+  if (Object.keys(colors).length > 0) overrides.colors = colors;
+  if (Object.keys(finishes).length > 0) overrides.finishes = finishes;
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
+}
+
 function sanitizePlacedObject(
   key: string,
   raw: unknown,
@@ -413,13 +490,22 @@ function sanitizePlacedObject(
       ? normalizeAngle(rotationY)
       : rotationY;
 
-  return {
+  const materialOverrides = sanitizeMaterialOverrides(
+    raw.materialOverrides,
+    assetId,
+    path,
+    issues,
+  );
+
+  const result: PlacedObject = {
     id: sanitizedId(raw, key, path, issues),
     assetId,
     position: { x: position.x, y: safeY, z: position.z },
     rotationY: safeRotation,
     scale: safeScale,
   };
+  if (materialOverrides) result.materialOverrides = materialOverrides;
+  return result;
 }
 
 function collectEntities<T>(

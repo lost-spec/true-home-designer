@@ -56,6 +56,34 @@ declare global {
       };
       hasAutosave: () => boolean;
       clearAutosave: () => void;
+      getMaterialState: (
+        objectId: string,
+      ) => Record<
+        string,
+        {
+          color: string;
+          roughness: number | null;
+          metalness: number | null;
+          emissive: string;
+        }
+      > | null;
+      getRenderInfo: () => {
+        memory: { geometries: number; textures: number };
+        programs: number;
+        render: {
+          frame: number;
+          calls: number;
+          triangles: number;
+          lines: number;
+          points: number;
+        };
+        color: {
+          outputColorSpace: string;
+          toneMapping: number;
+          toneMappingExposure: number;
+          colorManagement: boolean;
+        };
+      };
     };
   }
 }
@@ -176,6 +204,67 @@ export function DevBridge() {
       },
       hasAutosave: () => readAutosave() !== null,
       clearAutosave: () => clearAutosaveEntry(),
+      getMaterialState: (objectId) => {
+        const target = scene.getObjectByName(`object-${objectId}`);
+        if (!target) return null;
+        const materials: Record<
+          string,
+          {
+            color: string;
+            roughness: number | null;
+            metalness: number | null;
+            emissive: string;
+          }
+        > = {};
+        target.traverse((node) => {
+          const mesh = node as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const list = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
+          for (const material of list) {
+            const key = material.name || "(unnamed)";
+            if (materials[key]) continue;
+            const standard = material as THREE.MeshStandardMaterial;
+            materials[key] = {
+              color: standard.color
+                ? `#${standard.color.getHexString(THREE.SRGBColorSpace)}`
+                : "",
+              roughness:
+                typeof standard.roughness === "number" ? standard.roughness : null,
+              metalness:
+                typeof standard.metalness === "number" ? standard.metalness : null,
+              emissive: standard.emissive
+                ? `#${standard.emissive.getHexString(THREE.SRGBColorSpace)}`
+                : "",
+            };
+          }
+        });
+        return materials;
+      },
+      getRenderInfo: () => {
+        const info = gl.info;
+        return {
+          memory: {
+            geometries: info.memory.geometries,
+            textures: info.memory.textures,
+          },
+          programs: info.programs ? info.programs.length : 0,
+          render: {
+            frame: info.render.frame,
+            calls: info.render.calls,
+            triangles: info.render.triangles,
+            lines: info.render.lines,
+            points: info.render.points,
+          },
+          color: {
+            outputColorSpace: gl.outputColorSpace,
+            toneMapping: gl.toneMapping,
+            toneMappingExposure: gl.toneMappingExposure,
+            colorManagement: THREE.ColorManagement.enabled,
+          },
+        };
+      },
     };
 
     return () => {

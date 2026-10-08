@@ -16,6 +16,33 @@ export interface AssetDimensions {
   depth: number;
 }
 
+export interface MaterialTarget {
+  name: string;
+  color?: string;
+}
+
+export interface MaterialFinish {
+  id: string;
+  label: string;
+  color?: string;
+  roughness?: number;
+  metalness?: number;
+}
+
+export interface MaterialSlot {
+  id: string;
+  label: string;
+  originalColor: string;
+  targets: MaterialTarget[];
+  palette?: readonly string[];
+  finishes?: readonly MaterialFinish[];
+}
+
+export interface MaterialOverrides {
+  colors?: Record<string, string>;
+  finishes?: Record<string, string>;
+}
+
 export interface AssetMetadata {
   assetId: string;
   name: string;
@@ -26,4 +53,5 @@ export interface AssetMetadata {
   thumbnailPath?: string;
   allowRotation: boolean;
   allowScaling: boolean;
+  materialSlots?: readonly MaterialSlot[];
 }
