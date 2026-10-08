@@ -52,7 +52,7 @@ function OpeningMesh({
     <mesh
       name={`opening-${opening.id}`}
       position={box.position}
-      castShadow
+      castShadow={!isGlass}
       receiveShadow
       onPointerDown={onPointerDown}
       onClick={onSelect}

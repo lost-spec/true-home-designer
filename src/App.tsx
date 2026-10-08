@@ -35,7 +35,7 @@ export default function App() {
         <AssetPanel />
         <div className="viewport">
           <Canvas
-            shadows
+            shadows="percentage"
             dpr={[1, 2]}
             camera={{ position: [9, 7, 9], fov: 50 }}
             onPointerMissed={handlePointerMissed}

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { Grid, OrbitControls } from "@react-three/drei";
 import { HouseScene } from "./HouseScene";
+import { Lighting } from "./Lighting";
 import { PlacementController } from "./PlacementController";
 import { PlacementPreview } from "./PlacementPreview";
 import { CameraZoomBridge } from "./CameraZoomBridge";
@@ -12,20 +13,17 @@ export function Scene() {
   return (
     <>
       <color attach="background" args={["#11151c"]} />
-      <ambientLight intensity={0.7} />
-      <directionalLight
-        position={[14, 20, 10]}
-        intensity={1.7}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0002}
-        shadow-normalBias={0.03}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
-        shadow-camera-far={60}
-      />
+      <Lighting />
+      <mesh
+        name="ground"
+        position={[0, -0.02, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+        raycast={() => null}
+      >
+        <planeGeometry args={[400, 400]} />
+        <meshStandardMaterial color="#262b33" roughness={1} metalness={0} />
+      </mesh>
       <Grid
         cellSize={0.5}
         sectionSize={2.5}
