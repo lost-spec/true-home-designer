@@ -1,6 +1,5 @@
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
-import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 import { wallLength, type OpeningKind } from "../types/house";
 import { wallUsers } from "../geometry/roomGeometry";
 import {
@@ -9,6 +8,8 @@ import {
 } from "../geometry/openingGeometry";
 import { assetRegistry } from "../assets/registry";
 import { MaterialCustomizer } from "./MaterialCustomizer";
+import { NumberField } from "./NumberField";
+import { Icon } from "./Icon";
 import { rotateObjectY, stepObjectElevation, zoomObjectScale, MAX_OBJECT_ELEVATION, MIN_OBJECT_ELEVATION, MAX_OBJECT_SCALE, MIN_OBJECT_SCALE } from "../interaction/objectInteraction";
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -17,35 +18,6 @@ function Row({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
-  );
-}
-
-interface FieldProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  disabled?: boolean;
-  onChange: (raw: string) => void;
-}
-
-function Field({ label, value, min, max, step, disabled, onChange }: FieldProps) {
-  return (
-    <label className="dimension-row">
-      <span>{label}</span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        disabled={disabled}
-        onFocus={() => beginHistoryBatch()}
-        onBlur={() => endHistoryBatch()}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
   );
 }
 
@@ -62,10 +34,14 @@ export function Inspector() {
 
   if (!selection) {
     return (
-      <div className="inspector-empty">
-        Nothing selected.
-        <br />
-        Click a wall, door, window, floor or object in the viewport.
+      <div className="inspector-empty empty-state">
+        <div className="empty-state-icon">
+          <Icon name="cursor" size={18} />
+        </div>
+        <p className="empty-state-title">Nothing selected</p>
+        <p className="empty-state-hint">
+          Click a wall, door, window, floor or object in the viewport.
+        </p>
       </div>
     );
   }
@@ -82,7 +58,6 @@ export function Inspector() {
       .join(", ");
     return (
       <>
-        <h2>Wall</h2>
         <Row label="Length" value={metres(wallLength(wall))} />
         <Row label="Height" value={metres(wall.height)} />
         <Row label="Thickness" value={metres(wall.thickness)} />
@@ -101,12 +76,14 @@ export function Inspector() {
             title="Cut a door opening into this wall"
             onClick={() => addOpeningToWall(wall.id, "door")}
           >
+            <Icon name="door" size={13} />
             Add door
           </button>
           <button
             title="Cut a window opening into this wall"
             onClick={() => addOpeningToWall(wall.id, "window")}
           >
+            <Icon name="window" size={13} />
             Add window
           </button>
         </div>
@@ -139,26 +116,31 @@ export function Inspector() {
 
     return (
       <>
-        <h2>{isDoor ? "Door" : "Window"}</h2>
         <Row label="Wall length" value={metres(runLength)} />
-        <Field
-          label="Offset along wall (m)"
+        <NumberField
+          className="field-row"
+          label="Offset along wall"
+          unit="m"
           value={opening.offset}
           min={0}
           max={Math.max(0, runLength - opening.width)}
           step={0.05}
           onChange={(raw) => update("offset", raw)}
         />
-        <Field
-          label="Width (m)"
+        <NumberField
+          className="field-row"
+          label="Width"
+          unit="m"
           value={opening.width}
           min={MIN_OPENING_WIDTH}
           max={Math.max(MIN_OPENING_WIDTH, runLength)}
           step={0.05}
           onChange={(raw) => update("width", raw)}
         />
-        <Field
-          label="Height (m)"
+        <NumberField
+          className="field-row"
+          label="Height"
+          unit="m"
           value={opening.height}
           min={MIN_OPENING_HEIGHT}
           max={Math.max(MIN_OPENING_HEIGHT, wallHeight - opening.sillHeight)}
@@ -166,8 +148,10 @@ export function Inspector() {
           onChange={(raw) => update("height", raw)}
         />
         {isDoor ? null : (
-          <Field
-            label="Sill height (m)"
+          <NumberField
+            className="field-row"
+            label="Sill height"
+            unit="m"
             value={opening.sillHeight}
             min={0}
             max={Math.max(0, wallHeight - MIN_OPENING_HEIGHT)}
@@ -186,6 +170,7 @@ export function Inspector() {
             title={`Delete this ${isDoor ? "door" : "window"} (Delete)`}
             onClick={remove}
           >
+            <Icon name="trash" size={13} />
             Remove
           </button>
         </div>
@@ -201,7 +186,6 @@ export function Inspector() {
     ).length;
     return (
       <>
-        <h2>Room</h2>
         <Row label="Name" value={room.name} />
         <Row label="Width" value={metres(room.width)} />
         <Row label="Depth" value={metres(room.depth)} />
@@ -243,7 +227,6 @@ export function Inspector() {
   };
   return (
     <>
-      <h2>Object</h2>
       <Row label="Asset" value={asset?.name ?? object.assetId} />
       <Row
         label="Position"
@@ -263,6 +246,7 @@ export function Inspector() {
           title="Raise the object (PageUp)"
           onClick={() => elevate(1)}
         >
+          <Icon name="up" size={13} />
           Raise
         </button>
         <button
@@ -270,6 +254,7 @@ export function Inspector() {
           title="Lower the object (PageDown)"
           onClick={() => elevate(-1)}
         >
+          <Icon name="down" size={13} />
           Lower
         </button>
         <button
@@ -277,6 +262,7 @@ export function Inspector() {
           title="Zoom the object in"
           onClick={() => zoom(1)}
         >
+          <Icon name="plus" size={13} />
           Zoom +
         </button>
         <button
@@ -284,6 +270,7 @@ export function Inspector() {
           title="Zoom the object out"
           onClick={() => zoom(-1)}
         >
+          <Icon name="minus" size={13} />
           Zoom −
         </button>
         <button
@@ -293,6 +280,7 @@ export function Inspector() {
           }
           onClick={() => rotate(-1)}
         >
+          <Icon name="rotate" size={13} />
           Rotate −45°
         </button>
         <button
@@ -300,9 +288,11 @@ export function Inspector() {
           title={allowRotation ? "Rotate 45° clockwise" : "This asset cannot rotate"}
           onClick={() => rotate(1)}
         >
+          <Icon name="rotate" size={13} />
           Rotate +45°
         </button>
         <button className="danger" title="Delete this object" onClick={remove}>
+          <Icon name="trash" size={13} />
           Remove
         </button>
       </div>

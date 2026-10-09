@@ -11,9 +11,10 @@ import {
 import { useWallDrag } from "../interaction/useWallDrag";
 import { useOpeningDrag } from "../interaction/useOpeningDrag";
 import type { Opening } from "../types/house";
+import { towardSelection } from "./selectionColor";
 
 const WALL_COLOR = "#e9e4dc";
-const WALL_SELECTED = "#5b9cff";
+const WALL_SELECTED = towardSelection(WALL_COLOR, 0.28);
 const DOOR_COLOR = "#8a5a2b";
 const DOOR_FRAME_COLOR = "#5f3d1d";
 const WINDOW_COLOR = "#a8dcff";
@@ -38,15 +39,14 @@ function OpeningMesh({
   const isDoor = opening.kind === "door";
   const isGlass = !isDoor && !frame;
 
-  const color = isSelected
-    ? WALL_SELECTED
-    : frame
-      ? isDoor
-        ? DOOR_FRAME_COLOR
-        : WINDOW_FRAME_COLOR
-      : isDoor
-        ? DOOR_COLOR
-        : WINDOW_COLOR;
+  const baseColor = frame
+    ? isDoor
+      ? DOOR_FRAME_COLOR
+      : WINDOW_FRAME_COLOR
+    : isDoor
+      ? DOOR_COLOR
+      : WINDOW_COLOR;
+  const color = isSelected ? towardSelection(baseColor, 0.55) : baseColor;
 
   return (
     <mesh

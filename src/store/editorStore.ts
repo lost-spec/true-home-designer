@@ -5,6 +5,9 @@ export type Tool = "select" | "drawRoom" | "drawWall" | "placeObject";
 
 export type ViewMode = "3d" | "2d";
 
+/** Orbit is the classic turntable; walk is a first-person navigation mode. */
+export type NavigationMode = "orbit" | "walk";
+
 export type Selection =
   | { kind: "wall"; id: string }
   | { kind: "room"; id: string }
@@ -19,6 +22,7 @@ export interface EditorState {
   tool: Tool;
   selection: Selection;
   viewMode: ViewMode;
+  navigationMode: NavigationMode;
   ceilingVisible: boolean;
   snapSize: number;
   draggingWallId: string | null;
@@ -27,9 +31,13 @@ export interface EditorState {
   ghostPosition: Vec2 | null;
   draggingObjectId: string | null;
   draggingOpeningId: string | null;
+  leftPanelOpen: boolean;
+  rightPanelOpen: boolean;
   setTool: (tool: Tool) => void;
   select: (selection: Selection) => void;
   setViewMode: (viewMode: ViewMode) => void;
+  setNavigationMode: (navigationMode: NavigationMode) => void;
+  toggleNavigationMode: () => void;
   toggleCeiling: () => void;
   setCeilingVisible: (ceilingVisible: boolean) => void;
   setSnapSize: (snapSize: number) => void;
@@ -39,6 +47,8 @@ export interface EditorState {
   setGhostPosition: (position: Vec2 | null) => void;
   setDraggingObjectId: (objectId: string | null) => void;
   setDraggingOpeningId: (openingId: string | null) => void;
+  toggleLeftPanel: () => void;
+  toggleRightPanel: () => void;
 }
 
 const IDLE_PLACEMENT = {
@@ -51,6 +61,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   tool: "select",
   selection: null,
   viewMode: "3d",
+  navigationMode: "orbit",
   ceilingVisible: true,
   snapSize: 0.1,
   draggingWallId: null,
@@ -59,12 +70,27 @@ export const useEditorStore = create<EditorState>((set) => ({
   ghostPosition: null,
   draggingObjectId: null,
   draggingOpeningId: null,
+  leftPanelOpen: true,
+  rightPanelOpen: true,
   setTool: (tool) => set({ tool, ...IDLE_PLACEMENT }),
   select: (selection) => set({ selection }),
   setViewMode: (viewMode) => {
     if (viewMode !== "3d" && viewMode !== "2d") return;
-    set({ viewMode });
+    // The 2D plan has its own camera; never leave walk mode armed there.
+    set(viewMode === "2d" ? { viewMode, navigationMode: "orbit" } : { viewMode });
   },
+  setNavigationMode: (navigationMode) =>
+    set(
+      navigationMode === "walk"
+        ? { navigationMode, tool: "select", ...IDLE_PLACEMENT }
+        : { navigationMode },
+    ),
+  toggleNavigationMode: () =>
+    set((state) =>
+      state.navigationMode === "walk"
+        ? { navigationMode: "orbit" }
+        : { navigationMode: "walk", tool: "select", ...IDLE_PLACEMENT },
+    ),
   toggleCeiling: () =>
     set((state) => ({ ceilingVisible: !state.ceilingVisible })),
   setCeilingVisible: (ceilingVisible) => set({ ceilingVisible }),
@@ -85,4 +111,6 @@ export const useEditorStore = create<EditorState>((set) => ({
   setGhostPosition: (position) => set({ ghostPosition: position }),
   setDraggingObjectId: (objectId) => set({ draggingObjectId: objectId }),
   setDraggingOpeningId: (openingId) => set({ draggingOpeningId: openingId }),
+  toggleLeftPanel: () => set((state) => ({ leftPanelOpen: !state.leftPanelOpen })),
+  toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
 }));

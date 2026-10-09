@@ -5,13 +5,14 @@ import { getHistoryFlags, subscribeHistory } from "../store/history";
 import { firstWallUser } from "../geometry/roomGeometry";
 import { zoomCamera } from "../interaction/cameraZoom";
 import { DesignControls } from "./DesignControls";
+import { Icon, type IconName } from "./Icon";
 import type { RoomId } from "../types/house";
 
-const TOOLS: { id: Tool; label: string }[] = [
-  { id: "select", label: "Select" },
-  { id: "drawRoom", label: "Draw room" },
-  { id: "drawWall", label: "Draw wall" },
-  { id: "placeObject", label: "Place object" },
+const TOOLS: { id: Tool; label: string; icon: IconName; compact?: boolean }[] = [
+  { id: "select", label: "Select", icon: "cursor" },
+  { id: "drawRoom", label: "Draw room", icon: "room", compact: true },
+  { id: "drawWall", label: "Draw wall", icon: "wall", compact: true },
+  { id: "placeObject", label: "Place object", icon: "place" },
 ];
 
 export function Toolbar() {
@@ -62,14 +63,20 @@ export function Toolbar() {
 
   return (
     <header className="toolbar">
-      <span className="toolbar-title">True Home Designer</span>
+      <span className="toolbar-title">
+        <Icon name="home" size={15} />
+        <span className="toolbar-title-text">True Home Designer</span>
+      </span>
+      <span className="toolbar-sep" />
       <DesignControls />
+      <span className="toolbar-sep" />
       <div className="toolbar-group">
         <button
           disabled={!history.canUndo}
           onClick={() => useHouseStore.getState().undo()}
           title="Undo the last edit (Ctrl+Z)"
         >
+          <Icon name="undo" size={13} />
           Undo
         </button>
         <button
@@ -77,9 +84,11 @@ export function Toolbar() {
           onClick={() => useHouseStore.getState().redo()}
           title="Redo the last undone edit (Ctrl+Shift+Z)"
         >
+          <Icon name="redo" size={13} />
           Redo
         </button>
       </div>
+      <span className="toolbar-sep" />
       <div className="toolbar-group">
         {TOOLS.map((entry) => (
           <button
@@ -111,10 +120,12 @@ export function Toolbar() {
               setTool(entry.id);
             }}
           >
-            {entry.label}
+            <Icon name={entry.icon} size={13} />
+            {entry.compact ? null : entry.label}
           </button>
         ))}
         <button onClick={createRoom} title="Add a new room beside the selection">
+          <Icon name="roomAdd" size={13} />
           Create room
         </button>
         <button
@@ -126,6 +137,7 @@ export function Toolbar() {
           }
           onClick={() => addOpening("door")}
         >
+          <Icon name="door" size={13} />
           Add door
         </button>
         <button
@@ -137,26 +149,18 @@ export function Toolbar() {
           }
           onClick={() => addOpening("window")}
         >
+          <Icon name="window" size={13} />
           Add window
         </button>
-        <button
-          onClick={() => setViewMode(viewMode === "3d" ? "2d" : "3d")}
-          title={
-            viewMode === "3d"
-              ? "Switch to the 2D floor plan"
-              : "Switch back to the 3D view"
-          }
-        >
-          {viewMode === "3d" ? "2D plan" : "3D view"}
-        </button>
       </div>
+      <span className="toolbar-spacer" />
       <div className="toolbar-group">
-        <label className="toolbar-snap">
+        <label className="toolbar-snap" title="Grid snapping for wall drags">
+          <Icon name="magnet" size={13} />
           Snap
           <select
             value={snapSize}
             onChange={(event) => setSnapSize(Number(event.target.value))}
-            title="Grid snapping for wall drags"
           >
             {SNAP_OPTIONS.map((option) => (
               <option key={option} value={option}>
@@ -165,6 +169,7 @@ export function Toolbar() {
             ))}
           </select>
         </label>
+        <span className="toolbar-sep" />
         <button
           className={ceilingVisible ? "active" : ""}
           onClick={toggleCeiling}
@@ -175,10 +180,9 @@ export function Toolbar() {
               : "Ceiling control is available in the 3D view"
           }
         >
+          <Icon name="layers" size={13} />
           {ceilingVisible ? "Hide ceiling" : "Show ceiling"}
         </button>
-      </div>
-      <div className="toolbar-group">
         <button
           onClick={() => zoomCamera(1)}
           disabled={viewMode !== "3d"}
@@ -188,6 +192,7 @@ export function Toolbar() {
               : "Zoom is available in the 3D view"
           }
         >
+          <Icon name="zoomIn" size={13} />
           Zoom in
         </button>
         <button
@@ -199,8 +204,27 @@ export function Toolbar() {
               : "Zoom is available in the 3D view"
           }
         >
+          <Icon name="zoomOut" size={13} />
           Zoom out
         </button>
+        <div className="seg" role="group" aria-label="View mode">
+          <button
+            className={viewMode === "3d" ? "active" : ""}
+            title="Switch to the 3D view"
+            onClick={() => setViewMode("3d")}
+          >
+            <Icon name="cube" size={13} />
+            3D view
+          </button>
+          <button
+            className={viewMode === "2d" ? "active" : ""}
+            title="Switch to the 2D floor plan"
+            onClick={() => setViewMode("2d")}
+          >
+            <Icon name="plan" size={13} />
+            2D plan
+          </button>
+        </div>
       </div>
     </header>
   );

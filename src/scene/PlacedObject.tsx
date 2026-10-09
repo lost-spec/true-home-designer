@@ -46,7 +46,7 @@ export function PlacedObject({ objectId }: { objectId: string }) {
           rotation={[-Math.PI / 2, 0, 0]}
         >
           <ringGeometry args={[ringRadius, ringRadius + 0.15, 48]} />
-          <meshBasicMaterial color="#5b9cff" transparent opacity={0.9} />
+          <meshBasicMaterial color="#5b9cff" transparent opacity={0.55} />
         </mesh>
       )}
     </group>

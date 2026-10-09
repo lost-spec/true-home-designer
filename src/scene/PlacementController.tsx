@@ -28,6 +28,9 @@ export function PlacementController() {
 
     const insideDom = (clientX: number, clientY: number) => {
       const rect = dom.getBoundingClientRect();
+      // Hidden canvas (2D view): a zero-size rect would wrongly classify the
+      // synthetic (0, 0) coordinates of element.click() as inside.
+      if (rect.width <= 0 || rect.height <= 0) return false;
       return (
         clientX >= rect.left &&
         clientX <= rect.right &&

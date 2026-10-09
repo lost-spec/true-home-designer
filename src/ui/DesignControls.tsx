@@ -4,6 +4,7 @@ import {
   newDesign,
   saveDesignFile,
 } from "../persistence/designIO";
+import { Icon } from "./Icon";
 
 /**
  * New / Save / Load controls for the design document.
@@ -45,18 +46,21 @@ export function DesignControls() {
   return (
     <div className="toolbar-group">
       <button onClick={handleNew} title="Start a fresh design (default house)">
+        <Icon name="file" size={13} />
         New
       </button>
       <button
         onClick={handleSave}
         title="Download the design as a JSON file and update the autosave"
       >
+        <Icon name="save" size={13} />
         Save
       </button>
       <button
         onClick={() => fileInputRef.current?.click()}
         title="Load a design from a JSON file (validated before applying)"
       >
+        <Icon name="load" size={13} />
         Load
       </button>
       <input

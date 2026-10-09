@@ -46,6 +46,16 @@ export function useEditorHotkeys() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
 
+      // While walking, the camera owns the keyboard. Escape leaves the mode;
+      // everything else (undo, rotate, delete, zoom) stays out of the way.
+      if (useEditorStore.getState().navigationMode === "walk") {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          useEditorStore.getState().setNavigationMode("orbit");
+        }
+        return;
+      }
+
       const undoRedo = undoRedoAction(event);
       if (undoRedo) {
         event.preventDefault();
@@ -58,6 +68,12 @@ export function useEditorHotkeys() {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const editor = useEditorStore.getState();
+
+      if ((event.key === "f" || event.key === "F") && editor.viewMode === "3d") {
+        event.preventDefault();
+        editor.setNavigationMode("walk");
+        return;
+      }
 
       if (event.key === "Escape") {
         cancelActiveObjectDrag();

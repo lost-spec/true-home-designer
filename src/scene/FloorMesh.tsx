@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import { getFloorBox } from "../geometry/floorGeometry";
+import { towardSelection } from "./selectionColor";
 
 const FLOOR_COLOR = "#cfc7ba";
-const FLOOR_SELECTED = "#5b9cff";
+const FLOOR_SELECTED = towardSelection(FLOOR_COLOR, 0.22);
 
 export function FloorMesh({ roomId }: { roomId: string }) {
   const room = useHouseStore((s) => s.house.rooms[roomId]);

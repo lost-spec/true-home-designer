@@ -107,10 +107,10 @@ try {
 check("registry builds without validation errors", registryError === null, String(registryError));
 
 const assets = assetRegistry.list();
-check("registry has 10 assets", assets.length === 10, String(assets.length));
+check("registry has 11 assets", assets.length === 11, String(assets.length));
 check(
-  "registry index returns 2 living-room assets",
-  assetRegistry.byCategory("living-room").length === 2,
+  "registry index returns 3 living-room assets",
+  assetRegistry.byCategory("living-room").length === 3,
   String(assetRegistry.byCategory("living-room").length),
 );
 check(

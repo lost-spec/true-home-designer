@@ -5,3 +5,4 @@ dist
 *.tsbuildinfo
 .check-build
 devserver.log
+devserver.err.log

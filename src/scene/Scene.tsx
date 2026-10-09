@@ -5,14 +5,17 @@ import { Lighting } from "./Lighting";
 import { PlacementController } from "./PlacementController";
 import { PlacementPreview } from "./PlacementPreview";
 import { CameraZoomBridge } from "./CameraZoomBridge";
+import { WalkController } from "./WalkController";
+import { useEditorStore } from "../store/editorStore";
 import { DevBridge } from "../devBridge";
 
 const TARGET: [number, number, number] = [0, 1, 0];
 
 export function Scene() {
+  const walking = useEditorStore((s) => s.navigationMode === "walk");
   return (
     <>
-      <color attach="background" args={["#11151c"]} />
+      <color attach="background" args={["#0e131c"]} />
       <Lighting />
       <mesh
         name="ground"
@@ -22,11 +25,13 @@ export function Scene() {
         raycast={() => null}
       >
         <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#262b33" roughness={1} metalness={0} />
+        <meshStandardMaterial color="#1a212c" roughness={1} metalness={0} />
       </mesh>
       <Grid
         cellSize={0.5}
         sectionSize={2.5}
+        cellColor="#2a3441"
+        sectionColor="#3f5170"
         fadeDistance={45}
         position={[0, -0.01, 0]}
         infiniteGrid
@@ -37,8 +42,9 @@ export function Scene() {
         <PlacementPreview />
       </Suspense>
       {import.meta.env.DEV ? <DevBridge /> : null}
-<OrbitControls
+      <OrbitControls
         makeDefault
+        enabled={!walking}
         target={TARGET}
         enableDamping
         dampingFactor={0.08}
@@ -46,6 +52,7 @@ export function Scene() {
         minDistance={2}
         maxDistance={60}
       />
+      <WalkController />
       <CameraZoomBridge />
     </>
   );

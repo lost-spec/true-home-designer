@@ -1,7 +1,8 @@
 import { useHouseStore, type RoomDimensionsPatch } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
-import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 import { firstWallUser } from "../geometry/roomGeometry";
+import { NumberField } from "./NumberField";
+import { Section } from "./Section";
 import type { RoomId } from "../types/house";
 
 interface DimensionField {
@@ -13,24 +14,17 @@ interface DimensionField {
 }
 
 const FIELDS: DimensionField[] = [
-  { key: "width", label: "Width (m)", min: 1, max: 60, step: 0.1 },
-  { key: "depth", label: "Depth (m)", min: 1, max: 60, step: 0.1 },
-  { key: "height", label: "Wall height (m)", min: 1.5, max: 6, step: 0.05 },
+  { key: "width", label: "Width", min: 1, max: 60, step: 0.1 },
+  { key: "depth", label: "Depth", min: 1, max: 60, step: 0.1 },
+  { key: "height", label: "Wall height", min: 1.5, max: 6, step: 0.05 },
   {
     key: "wallThickness",
-    label: "Wall thickness (m)",
+    label: "Wall thickness",
     min: 0.05,
     max: 0.5,
     step: 0.01,
   },
 ];
-
-// Editing one field from focus to blur is a single undo step, no matter how
-// many keystrokes it takes.
-const historyBatchProps = {
-  onFocus: () => beginHistoryBatch(),
-  onBlur: () => endHistoryBatch(),
-};
 
 export function RoomDimensionsPanel() {
   const selection = useEditorStore((s) => s.selection);
@@ -71,43 +65,40 @@ export function RoomDimensionsPanel() {
   };
 
   return (
-    <section className="panel-section">
-      <h2>Room dimensions</h2>
-      <p className="panel-hint">{room.name}</p>
+    <Section title="Room dimensions" hint={room.name}>
       {FIELDS.map((field) => (
-        <label key={field.key} className="dimension-row">
-          <span>{field.label}</span>
-          <input
-            type="number"
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            value={room[field.key] ?? ""}
-            {...historyBatchProps}
-            onChange={(event) => change(field.key, event.target.value)}
-          />
-        </label>
+        <NumberField
+          key={field.key}
+          className="dimension-row"
+          label={field.label}
+          unit="m"
+          value={room[field.key] ?? 0}
+          min={field.min}
+          max={field.max}
+          step={field.step}
+          onChange={(raw) => change(field.key, raw)}
+        />
       ))}
-      <label className="position-row">
-        <span>Position X (m)</span>
-        <input
-          type="number"
-          step={0.1}
-          value={room.position.x}
-          {...historyBatchProps}
-          onChange={(event) => changePosition("x", event.target.value)}
-        />
-      </label>
-      <label className="position-row">
-        <span>Position Z (m)</span>
-        <input
-          type="number"
-          step={0.1}
-          value={room.position.z}
-          {...historyBatchProps}
-          onChange={(event) => changePosition("z", event.target.value)}
-        />
-      </label>
-    </section>
+      <NumberField
+        className="position-row"
+        label="Position X"
+        unit="m"
+        value={room.position.x}
+        min={-10000}
+        max={10000}
+        step={0.1}
+        onChange={(raw) => changePosition("x", raw)}
+      />
+      <NumberField
+        className="position-row"
+        label="Position Z"
+        unit="m"
+        value={room.position.z}
+        min={-10000}
+        max={10000}
+        step={0.1}
+        onChange={(raw) => changePosition("z", raw)}
+      />
+    </Section>
   );
 }
