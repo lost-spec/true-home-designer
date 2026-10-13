@@ -1,7 +1,14 @@
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import { wallLength, type OpeningKind } from "../types/house";
-import { wallUsers } from "../geometry/roomGeometry";
+import {
+  DEFAULT_BASEBOARD_COLOR,
+  DEFAULT_BASEBOARD_HEIGHT,
+  DEFAULT_SURFACES,
+  MAX_BASEBOARD_HEIGHT,
+  MIN_BASEBOARD_HEIGHT,
+} from "../types/house";
+import { roomForWall, wallSpan } from "../geometry/roomGeometry";
 import {
   MIN_OPENING_HEIGHT,
   MIN_OPENING_WIDTH,
@@ -52,16 +59,25 @@ export function Inspector() {
     const openingCount = Object.values(house.openings).filter(
       (o) => o.wallId === wall.id,
     ).length;
-    const users = wallUsers(house, wall.id);
-    const roomNames = users
-      .map((user) => house.rooms[user.roomId]?.name ?? user.roomId)
-      .join(", ");
+    const owner = roomForWall(house, wall.id);
+    const roomName = owner
+      ? house.rooms[owner.roomId]?.name ?? owner.roomId
+      : "None";
+    const isPartition = wall.partition === true;
+    const partitionOrientation = isPartition
+      ? wallSpan(wall)?.run === "x"
+        ? "Across depth"
+        : "Across width"
+      : null;
+    const roomWall = owner
+      ? house.rooms[owner.roomId]?.surfaces.wall ?? DEFAULT_SURFACES.wall
+      : DEFAULT_SURFACES.wall;
     return (
       <>
         <Row label="Length" value={metres(wallLength(wall))} />
         <Row label="Height" value={metres(wall.height)} />
         <Row label="Thickness" value={metres(wall.thickness)} />
-        <Row label="Rooms" value={roomNames || "None"} />
+        <Row label="Room" value={roomName} />
         <Row label="Openings" value={String(openingCount)} />
         <Row
           label="Start"
@@ -71,6 +87,110 @@ export function Inspector() {
           label="End"
           value={`(${wall.end.x.toFixed(1)}, ${wall.end.z.toFixed(1)})`}
         />
+        {isPartition ? (
+          <>
+            <Row label="Type" value="Partition" />
+            <Row label="Orientation" value={partitionOrientation ?? "—"} />
+          </>
+        ) : null}
+        <div className="field-row colour-row">
+          <span>Colour</span>
+          <input
+            type="color"
+            title="Override this wall's colour"
+            value={wall.color ?? roomWall}
+            onChange={(event) =>
+              useHouseStore.getState().setWallColor(wall.id, event.target.value)
+            }
+          />
+          {wall.color !== undefined ? (
+            <button
+              className="text-reset"
+              title="Use the room's wall colour again"
+              onClick={() =>
+                useHouseStore.getState().setWallColor(wall.id, null)
+              }
+            >
+              Reset colour
+            </button>
+          ) : null}
+        </div>
+        <label className="field-row baseboard-row">
+          <span>Skirting board</span>
+          <input
+            type="checkbox"
+            checked={wall.baseboard !== null}
+            title="Show a skirting board along this wall"
+            onChange={(event) =>
+              useHouseStore
+                .getState()
+                .setWallBaseboard(
+                  wall.id,
+                  event.target.checked
+                    ? { height: DEFAULT_BASEBOARD_HEIGHT, color: DEFAULT_BASEBOARD_COLOR }
+                    : null,
+                )
+            }
+          />
+        </label>
+        {wall.baseboard !== null ? (
+          <>
+            <NumberField
+              className="field-row"
+              label="Skirting height"
+              unit="m"
+              value={wall.baseboard?.height ?? DEFAULT_BASEBOARD_HEIGHT}
+              min={MIN_BASEBOARD_HEIGHT}
+              max={Math.min(MAX_BASEBOARD_HEIGHT, wall.height)}
+              step={0.01}
+              onChange={(raw) => {
+                const value = Number(raw);
+                if (!Number.isFinite(value)) return;
+                useHouseStore.getState().setWallBaseboard(wall.id, {
+                  height: value,
+                  color: wall.baseboard?.color ?? DEFAULT_BASEBOARD_COLOR,
+                });
+              }}
+            />
+            <div className="field-row colour-row">
+              <span>Skirting colour</span>
+              <input
+                type="color"
+                title="Colour of the skirting board"
+                value={wall.baseboard?.color ?? DEFAULT_BASEBOARD_COLOR}
+                onChange={(event) =>
+                  useHouseStore.getState().setWallBaseboard(wall.id, {
+                    height: wall.baseboard?.height ?? DEFAULT_BASEBOARD_HEIGHT,
+                    color: event.target.value,
+                  })
+                }
+              />
+            </div>
+          </>
+        ) : null}
+        {isPartition ? (
+          <>
+            <p className="panel-hint">
+              Drag the partition in the viewport to slide it across the room.
+              Hold Shift to move it freely without snapping.
+            </p>
+            <div className="inspector-actions">
+              <button
+                className="danger"
+                title="Delete this partition wall"
+                onClick={() => {
+                  useHouseStore.getState().removePartition(wall.id);
+                  useEditorStore
+                    .getState()
+                    .select({ kind: "room", id: wall.roomId ?? wall.id });
+                }}
+              >
+                <Icon name="trash" size={13} />
+                Remove partition
+              </button>
+            </div>
+          </>
+        ) : null}
         <div className="inspector-actions">
           <button
             title="Cut a door opening into this wall"
@@ -181,20 +301,21 @@ export function Inspector() {
   if (selection.kind === "room") {
     const room = house.rooms[selection.id];
     if (!room) return null;
-    const sharedCount = Object.values(room.edges).filter(
-      (wallId) => wallUsers(house, wallId).length > 1,
-    ).length;
+    const notchArea = room.notch
+      ? room.notch.width * room.notch.depth
+      : 0;
+    const area = room.width * room.depth - notchArea;
     return (
       <>
         <Row label="Name" value={room.name} />
         <Row label="Width" value={metres(room.width)} />
         <Row label="Depth" value={metres(room.depth)} />
+        <Row label="Shape" value={room.notch ? "L-shape" : "Rectangle"} />
+        <Row label="Area" value={`${area.toFixed(1)} m²`} />
         <Row
-          label="Area"
-          value={`${(room.width * room.depth).toFixed(1)} m²`}
+          label="Walls"
+          value={String(Object.keys(room.edges).length + (room.notch ? 2 : 0))}
         />
-        <Row label="Walls" value={String(Object.keys(room.edges).length)} />
-        <Row label="Shared walls" value={String(sharedCount)} />
       </>
     );
   }
@@ -290,6 +411,23 @@ export function Inspector() {
         >
           <Icon name="rotate" size={13} />
           Rotate +45°
+        </button>
+        <button
+          title="Duplicate this object (Ctrl+D)"
+          onClick={() => {
+            const id = useHouseStore.getState().duplicatePlacedObject(object.id);
+            if (id) useEditorStore.getState().select({ kind: "object", id });
+          }}
+        >
+          <Icon name="copy" size={13} />
+          Duplicate
+        </button>
+        <button
+          title="Mirror this object across the room"
+          onClick={() => useHouseStore.getState().mirrorPlacedObject(object.id)}
+        >
+          <Icon name="flip" size={13} />
+          Mirror
         </button>
         <button className="danger" title="Delete this object" onClick={remove}>
           <Icon name="trash" size={13} />

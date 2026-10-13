@@ -8,21 +8,40 @@ import type {
   PlacedObject,
   RoomEdge,
   RoomId,
+  RoomNotch,
+  RoomSurfaces,
+  Wall,
+  WallBaseboard,
   WallId,
 } from "../types/house";
 import {
+  DEFAULT_BASEBOARD_HEIGHT,
   DEFAULT_WALL_HEIGHT,
   DEFAULT_WALL_THICKNESS,
+  MAX_BASEBOARD_HEIGHT,
+  MIN_BASEBOARD_HEIGHT,
+  SINGLE_ROOM_ID,
 } from "../types/house";
 import {
   MIN_ROOM_SIZE,
   MAX_ROOM_SIZE,
+  buildPartitionWall,
+  carryOverrides,
   createRoom,
+  movePartitionWall,
   moveRoomEdgeRect,
+  normalizeRoom,
+  partitionWallId,
+  partitionWalls,
   reconcile,
   wallUsers,
   type RoomSpec,
 } from "../geometry/roomGeometry";
+import {
+  findRoomTemplate,
+  roomFromTemplate,
+  templateObjects,
+} from "../assets/roomTemplates";
 import {
   defaultOpeningSize,
   findOpeningOffset,
@@ -30,7 +49,11 @@ import {
   openingsConflict,
 } from "../geometry/openingGeometry";
 import { normalizeAngle } from "../interaction/objectInteraction";
-import { withSlotColor, withSlotFinish } from "../assets/materialSlots";
+import {
+  normalizeHex,
+  withSlotColor,
+  withSlotFinish,
+} from "../assets/materialSlots";
 import {
   recordHouseChange,
   suppressHistory,
@@ -77,12 +100,23 @@ export function nextObjectId(house: House): ObjectId {
   return `obj-${index}`;
 }
 
+function roomContainingPoint(house: House, x: number, z: number) {
+  for (const room of Object.values(house.rooms)) {
+    const x0 = room.position.x;
+    const z0 = room.position.z;
+    if (x >= x0 && x <= x0 + room.width && z >= z0 && z <= z0 + room.depth) {
+      return room;
+    }
+  }
+  return null;
+}
+
 const firstRoom = createRoom({
   id: "room-1",
   name: "Room 1",
-  position: { x: -3, z: -2.5 },
-  width: 6,
-  depth: 5,
+  position: { x: -3.5, z: -3 },
+  width: 7,
+  depth: 6,
 });
 
 const sampleHouse: House = {
@@ -178,6 +212,18 @@ export interface HouseState {
   setRoomDimensions: (roomId: RoomId, patch: RoomDimensionsPatch) => void;
   setRoomPosition: (roomId: RoomId, x: number, z: number) => void;
   moveRoomEdge: (roomId: RoomId, edge: RoomEdge, worldPosition: number) => void;
+  setRoomNotch: (roomId: RoomId, notch: RoomNotch | null) => void;
+  setRoomSurface: (
+    roomId: RoomId,
+    key: keyof RoomSurfaces,
+    color: string,
+  ) => void;
+  setWallColor: (wallId: WallId, color: string | null) => void;
+  setWallBaseboard: (wallId: WallId, baseboard: WallBaseboard | null) => void;
+  addPartition: (roomId: RoomId, run: "x" | "z") => WallId | null;
+  movePartition: (wallId: WallId, coord: number) => void;
+  removePartition: (wallId: WallId) => void;
+  applyRoomTemplate: (templateId: string) => void;
   addRoom: (spec?: AddRoomSpec) => RoomId;
   removeRoom: (roomId: RoomId) => void;
   addOpening: (spec: OpeningSpec) => OpeningId | null;
@@ -190,6 +236,8 @@ export interface HouseState {
     patch: Partial<Omit<PlacedObject, "id">>,
   ) => void;
   removePlacedObject: (id: ObjectId) => void;
+  duplicatePlacedObject: (id: ObjectId) => ObjectId | null;
+  mirrorPlacedObject: (id: ObjectId) => ObjectId | null;
   setMaterialOverride: (
     id: ObjectId,
     slotId: string,
@@ -325,6 +373,179 @@ export const useHouseStore = create<HouseState>((rawSet, get) => {
 
       return {
         house: reconcile({ ...state.house, rooms }),
+      };
+    }),
+
+  setWallColor: (wallId, color) =>
+    set((state) => {
+      const wall = state.house.walls[wallId];
+      if (!wall) return state;
+      const updated: Wall = { ...wall };
+      if (color === null) {
+        if (updated.color === undefined) return state;
+        delete updated.color;
+      } else {
+        const hex = normalizeHex(color);
+        if (!hex || updated.color === hex) return state;
+        updated.color = hex;
+      }
+      return {
+        house: {
+          ...state.house,
+          walls: { ...state.house.walls, [wallId]: updated },
+        },
+      };
+    }),
+
+  setWallBaseboard: (wallId, baseboard) =>
+    set((state) => {
+      const wall = state.house.walls[wallId];
+      if (!wall) return state;
+      const updated: Wall = { ...wall };
+      if (baseboard === null) {
+        if (updated.baseboard === null) return state;
+        updated.baseboard = null;
+      } else {
+        const height = clampOr(
+          baseboard.height,
+          DEFAULT_BASEBOARD_HEIGHT,
+          MIN_BASEBOARD_HEIGHT,
+          Math.min(MAX_BASEBOARD_HEIGHT, wall.height),
+        );
+        const color = normalizeHex(baseboard.color);
+        if (!color) return state;
+        const normalized: WallBaseboard = { height, color };
+        if (
+          updated.baseboard &&
+          updated.baseboard.height === normalized.height &&
+          updated.baseboard.color === normalized.color
+        ) {
+          return state;
+        }
+        updated.baseboard = normalized;
+      }
+      return {
+        house: {
+          ...state.house,
+          walls: { ...state.house.walls, [wallId]: updated },
+        },
+      };
+    }),
+
+  addPartition: (roomId, run) => {
+    const house = get().house;
+    const room = house.rooms[roomId];
+    if (!room || room.notch) return null;
+
+    const existing = partitionWalls(house, roomId);
+    const used = new Set(existing.map((wall) => wall.id));
+    let index = 1;
+    while (used.has(partitionWallId(roomId, index))) index += 1;
+    const id = partitionWallId(roomId, index);
+
+    const coord =
+      run === "x"
+        ? room.position.z + room.depth / 2
+        : room.position.x + room.width / 2;
+    const wall = buildPartitionWall(id, room, run, coord);
+
+    set((state) => ({
+      house: reconcile({
+        ...state.house,
+        walls: { ...state.house.walls, [id]: wall },
+      }),
+    }));
+    useEditorStore.getState().select({ kind: "wall", id });
+    return id;
+  },
+
+  movePartition: (wallId, coord) =>
+    set((state) => {
+      const wall = state.house.walls[wallId];
+      if (!wall?.partition || !wall.roomId) return state;
+      const room = state.house.rooms[wall.roomId];
+      if (!room || room.notch || !Number.isFinite(coord)) return state;
+
+      const moved = carryOverrides(wall, movePartitionWall(room, wall, coord));
+      if (
+        moved.start.x === wall.start.x &&
+        moved.start.z === wall.start.z &&
+        moved.end.x === wall.end.x &&
+        moved.end.z === wall.end.z
+      ) {
+        return state;
+      }
+
+      return {
+        house: reconcile({
+          ...state.house,
+          walls: { ...state.house.walls, [wallId]: moved },
+        }),
+      };
+    }),
+
+  removePartition: (wallId) =>
+    set((state) => {
+      const wall = state.house.walls[wallId];
+      if (!wall?.partition) return state;
+      const walls = { ...state.house.walls };
+      delete walls[wallId];
+      return { house: reconcile({ ...state.house, walls }) };
+    }),
+
+  setRoomNotch: (roomId, notch) =>
+    set((state) => {
+      const room = state.house.rooms[roomId];
+      if (!room) return state;
+      const next = notch ? { ...notch } : null;
+      const same =
+        room.notch === next ||
+        (room.notch !== null &&
+          next !== null &&
+          room.notch.corner === next.corner &&
+          room.notch.width === next.width &&
+          room.notch.depth === next.depth);
+      if (same) return state;
+      return {
+        house: reconcile({
+          ...state.house,
+          rooms: { ...state.house.rooms, [roomId]: { ...room, notch: next } },
+        }),
+      };
+    }),
+
+  setRoomSurface: (roomId, key, color) =>
+    set((state) => {
+      const room = state.house.rooms[roomId];
+      if (!room) return state;
+      const hex = normalizeHex(color);
+      if (!hex || room.surfaces[key] === hex) return state;
+      const surfaces = { ...room.surfaces, [key]: hex };
+      return {
+        house: {
+          ...state.house,
+          rooms: { ...state.house.rooms, [roomId]: { ...room, surfaces } },
+        },
+      };
+    }),
+
+  applyRoomTemplate: (templateId) =>
+    set((state) => {
+      const template = findRoomTemplate(templateId);
+      const base =
+        state.house.rooms[SINGLE_ROOM_ID] ??
+        Object.values(state.house.rooms)[0];
+      if (!template || !base) return state;
+      const room = roomFromTemplate(template, base);
+      const objects = Object.fromEntries(
+        templateObjects(template, room).map((object) => [object.id, object]),
+      );
+      return {
+        house: reconcile({
+          ...state.house,
+          rooms: { [room.id]: normalizeRoom(room) },
+          objects,
+        }),
       };
     }),
 
@@ -511,6 +732,60 @@ export const useHouseStore = create<HouseState>((rawSet, get) => {
       delete objects[id];
       return { house: { ...state.house, objects } };
     }),
+
+  duplicatePlacedObject: (id) => {
+    const existing = get().house.objects[id];
+    if (!existing) return null;
+    const newId = nextObjectId(get().house);
+    const overrides = existing.materialOverrides;
+    const copy: PlacedObject = {
+      ...existing,
+      id: newId,
+      position: {
+        x: existing.position.x + 0.4,
+        y: existing.position.y,
+        z: existing.position.z + 0.4,
+      },
+      materialOverrides: overrides
+        ? {
+            colors: overrides.colors ? { ...overrides.colors } : undefined,
+            finishes: overrides.finishes ? { ...overrides.finishes } : undefined,
+          }
+        : undefined,
+    };
+    set((state) => ({
+      house: {
+        ...state.house,
+        objects: { ...state.house.objects, [newId]: copy },
+      },
+    }));
+    return newId;
+  },
+
+  mirrorPlacedObject: (id) => {
+    const existing = get().house.objects[id];
+    if (!existing) return null;
+    const room = roomContainingPoint(
+      get().house,
+      existing.position.x,
+      existing.position.z,
+    );
+    const axisX = room ? room.position.x + room.width / 2 : 0;
+    set((state) => ({
+      house: {
+        ...state.house,
+        objects: {
+          ...state.house.objects,
+          [id]: {
+            ...existing,
+            position: { ...existing.position, x: axisX * 2 - existing.position.x },
+            rotationY: normalizeAngle(-existing.rotationY),
+          },
+        },
+      },
+    }));
+    return id;
+  },
 
   setMaterialOverride: (id, slotId, patch) =>
     set((state) => {

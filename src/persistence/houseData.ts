@@ -22,17 +22,26 @@
  */
 import type {
   House,
+  NotchCorner,
   Opening,
   PlacedObject,
   Room,
   RoomEdge,
+  RoomNotch,
+  RoomSurfaces,
   Wall,
+  WallBaseboard,
 } from "../types/house";
 import type { MaterialOverrides } from "../assets/types";
 import { normalizeHex } from "../assets/materialSlots";
 import {
+  DEFAULT_BASEBOARD_COLOR,
+  DEFAULT_BASEBOARD_HEIGHT,
+  DEFAULT_SURFACES,
   DEFAULT_WALL_HEIGHT,
   DEFAULT_WALL_THICKNESS,
+  MAX_BASEBOARD_HEIGHT,
+  MIN_BASEBOARD_HEIGHT,
 } from "../types/house";
 import {
   MAX_ROOM_SIZE,
@@ -56,7 +65,7 @@ export const HOUSE_SCHEMA_VERSION = 1;
 
 export interface DesignSettings {
   ceilingVisible: boolean;
-  viewMode: "2d" | "3d";
+  viewMode: "3d";
   snapSize: number;
 }
 
@@ -187,6 +196,118 @@ function sanitizedId(
   return key;
 }
 
+function sanitizeNotch(
+  raw: unknown,
+  roomWidth: number,
+  roomDepth: number,
+  path: string,
+  issues: Issues,
+): RoomNotch | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) {
+    issues.warnings.push(`${path}.notch must be an object; ignored`);
+    return null;
+  }
+  const corner = raw.corner;
+  if (
+    corner !== "ne" &&
+    corner !== "nw" &&
+    corner !== "se" &&
+    corner !== "sw"
+  ) {
+    issues.warnings.push(`${path}.notch.corner was invalid; notch ignored`);
+    return null;
+  }
+  const width = raw.width;
+  const depth = raw.depth;
+  if (
+    !isFiniteNumber(width) ||
+    !isFiniteNumber(depth) ||
+    width <= 0 ||
+    depth <= 0
+  ) {
+    issues.warnings.push(
+      `${path}.notch has invalid dimensions; notch ignored`,
+    );
+    return null;
+  }
+  const maxWidth = Math.max(0, roomWidth - MIN_ROOM_SIZE);
+  const maxDepth = Math.max(0, roomDepth - MIN_ROOM_SIZE);
+  const safeWidth = clamp(width, 0, maxWidth);
+  const safeDepth = clamp(depth, 0, maxDepth);
+  if (safeWidth < 0.5 || safeDepth < 0.5) {
+    issues.warnings.push(`${path}.notch was too small once clamped; notch ignored`);
+    return null;
+  }
+  return { corner: corner as NotchCorner, width: safeWidth, depth: safeDepth };
+}
+
+function sanitizeSurfaces(
+  raw: unknown,
+  path: string,
+  issues: Issues,
+): RoomSurfaces {
+  if (raw === undefined) return { ...DEFAULT_SURFACES };
+  if (!isRecord(raw)) {
+    issues.warnings.push(`${path}.surfaces must be an object; using defaults`);
+    return { ...DEFAULT_SURFACES };
+  }
+  const out: RoomSurfaces = { ...DEFAULT_SURFACES };
+  for (const key of ["wall", "floor", "ceiling"] as const) {
+    const value = raw[key];
+    if (value === undefined) continue;
+    const hex = normalizeHex(value);
+    if (hex) out[key] = hex;
+    else
+      issues.warnings.push(
+        `${path}.surfaces.${key} was invalid; using ${DEFAULT_SURFACES[key]}`,
+      );
+  }
+  return out;
+}
+
+function sanitizeBaseboard(
+  raw: unknown,
+  wallHeight: number,
+  path: string,
+  issues: Issues,
+): WallBaseboard {
+  if (!isRecord(raw)) {
+    issues.warnings.push(`${path}.baseboard must be an object; using defaults`);
+    return { height: DEFAULT_BASEBOARD_HEIGHT, color: DEFAULT_BASEBOARD_COLOR };
+  }
+  let height = DEFAULT_BASEBOARD_HEIGHT;
+  if (raw.height === undefined) {
+    issues.warnings.push(
+      `${path}.baseboard.height was missing; using ${DEFAULT_BASEBOARD_HEIGHT}`,
+    );
+  } else if (!isFiniteNumber(raw.height)) {
+    issues.warnings.push(
+      `${path}.baseboard.height must be a number; using ${DEFAULT_BASEBOARD_HEIGHT}`,
+    );
+  } else {
+    height = clamp(
+      raw.height,
+      MIN_BASEBOARD_HEIGHT,
+      Math.min(MAX_BASEBOARD_HEIGHT, wallHeight),
+    );
+  }
+  let color = DEFAULT_BASEBOARD_COLOR;
+  if (raw.color === undefined) {
+    issues.warnings.push(
+      `${path}.baseboard.color was missing; using ${DEFAULT_BASEBOARD_COLOR}`,
+    );
+  } else {
+    const hex = normalizeHex(raw.color);
+    if (hex) color = hex;
+    else
+      issues.warnings.push(
+        `${path}.baseboard.color was invalid; using ${DEFAULT_BASEBOARD_COLOR}`,
+      );
+  }
+  return { height, color };
+}
+
 function sanitizeRoom(
   key: string,
   raw: unknown,
@@ -274,6 +395,8 @@ function sanitizeRoom(
     height: safeHeight,
     wallThickness: safeThickness,
     edges: edges as Record<RoomEdge, string>,
+    notch: sanitizeNotch(raw.notch, safeWidth, safeDepth, path, issues),
+    surfaces: sanitizeSurfaces(raw.surfaces, path, issues),
   };
 }
 
@@ -305,13 +428,51 @@ function sanitizeWall(
           issues,
         );
 
-  return {
+  let color: string | undefined;
+  if (raw.color !== undefined && raw.color !== null) {
+    const hex = normalizeHex(raw.color);
+    if (hex) color = hex;
+    else issues.warnings.push(`${path}.color was invalid; ignored`);
+  }
+
+  let baseboard: WallBaseboard | null | undefined;
+  if (raw.baseboard !== undefined) {
+    if (raw.baseboard === null) {
+      baseboard = null;
+    } else {
+      baseboard = sanitizeBaseboard(raw.baseboard, safeHeight, path, issues);
+    }
+  }
+
+  let partition = false;
+  if (raw.partition !== undefined) {
+    if (raw.partition === true) partition = true;
+    else issues.warnings.push(`${path}.partition must be true; ignored`);
+  }
+
+  let roomId: string | undefined;
+  if (raw.roomId !== undefined) {
+    if (typeof raw.roomId === "string" && raw.roomId.length > 0) {
+      roomId = raw.roomId;
+    } else {
+      issues.warnings.push(`${path}.roomId was invalid; ignored`);
+    }
+  }
+
+  const wall: Wall = {
     id: sanitizedId(raw, key, path, issues),
     start,
     end,
     height: safeHeight,
     thickness: safeThickness,
   };
+  if (color !== undefined) wall.color = color;
+  if (baseboard !== undefined) wall.baseboard = baseboard;
+  if (partition) {
+    wall.partition = true;
+    if (roomId !== undefined) wall.roomId = roomId;
+  }
+  return wall;
 }
 
 function sanitizeOpening(
@@ -593,10 +754,14 @@ function sanitizeSettings(raw: unknown, issues: Issues): DesignSettings {
     }
   }
   if (raw.viewMode !== undefined) {
-    if (raw.viewMode === "2d" || raw.viewMode === "3d") {
-      settings.viewMode = raw.viewMode;
+    if (raw.viewMode === "3d") {
+      settings.viewMode = "3d";
+    } else if (raw.viewMode === "2d") {
+      issues.warnings.push(
+        "settings.viewMode 2d is no longer supported; using 3d",
+      );
     } else {
-      issues.warnings.push('settings.viewMode must be "2d" or "3d"; using default');
+      issues.warnings.push('settings.viewMode must be "3d"; using default');
     }
   }
   if (raw.snapSize !== undefined) {

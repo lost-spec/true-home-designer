@@ -199,3 +199,56 @@ export function getWallHoleRects(
 ): OpeningRect[] {
   return wallHoles(wall, openings);
 }
+
+/**
+ * Solid boxes for a skirting board running along the wall base. The wall's
+ * openings are honoured, but unlike the wall body a baseboard is cut away
+ * entirely wherever an opening touches the floor band (doors, or a window the
+ * user has sunk to sill 0) — it never arches over an opening. Windows whose
+ * sill sits above the board let it pass underneath unchanged.
+ */
+export function getBaseboardBoxes(
+  wall: Wall,
+  openings: Opening[],
+  top: number,
+  protrude = 0.03,
+): BoxSpec[] {
+  const { length } = getWallPlacement(wall);
+  if (length <= BOX_EPS || top <= BOX_EPS) return [];
+
+  const thickness = wall.thickness + protrude * 2;
+  const boxes: BoxSpec[] = [];
+
+  const add = (x0: number, x1: number) => {
+    if (x1 - x0 <= BOX_EPS) return;
+    boxes.push({
+      position: [(x0 + x1) / 2, top / 2, 0],
+      size: [x1 - x0, top, thickness],
+    });
+  };
+
+  const holes = wallHoles(wall, openings);
+  if (holes.length === 0) {
+    add(0, length);
+    return boxes;
+  }
+
+  const boundaries = new Set<number>([0, length]);
+  for (const hole of holes) {
+    boundaries.add(hole.x0);
+    boundaries.add(hole.x1);
+  }
+  const xs = [...boundaries].sort((a, b) => a - b);
+
+  for (let i = 0; i < xs.length - 1; i += 1) {
+    const x0 = xs[i];
+    const x1 = xs[i + 1];
+    if (x1 - x0 <= BOX_EPS) continue;
+    const cut = holes.some(
+      (hole) => hole.x0 <= x0 + 1e-9 && hole.x1 >= x1 - 1e-9 && hole.y0 < top,
+    );
+    if (!cut) add(x0, x1);
+  }
+
+  return boxes;
+}

@@ -11,6 +11,7 @@ import { assetRegistry } from "../assets/registry";
 import { rotateObjectY, stepObjectElevation } from "./objectInteraction";
 import { zoomCamera } from "./cameraZoom";
 import { cancelActiveObjectDrag } from "./useObjectDrag";
+import { cancelActiveGizmoDrag } from "../scene/TransformGizmo";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -65,6 +66,20 @@ export function useEditorHotkeys() {
         return;
       }
 
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        (event.key === "d" || event.key === "D")
+      ) {
+        const selection = useEditorStore.getState().selection;
+        if (selection?.kind === "object") {
+          event.preventDefault();
+          const id = useHouseStore.getState().duplicatePlacedObject(selection.id);
+          if (id) useEditorStore.getState().select({ kind: "object", id });
+        }
+        return;
+      }
+
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const editor = useEditorStore.getState();
@@ -77,6 +92,7 @@ export function useEditorHotkeys() {
 
       if (event.key === "Escape") {
         cancelActiveObjectDrag();
+        cancelActiveGizmoDrag();
         if (editor.tool === "placeObject" || editor.placingAssetId) {
           editor.setTool("select");
         } else {

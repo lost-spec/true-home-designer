@@ -3,14 +3,13 @@ import { useThree } from "@react-three/fiber";
 import { ContactShadows, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { useHouseStore } from "../store/houseStore";
+import { useEditorStore } from "../store/editorStore";
 import { assetRegistry } from "../assets/registry";
 import { CEILING_THICKNESS } from "../types/house";
+import { LIGHTING_PRESET_SPECS } from "./lightingPresets";
 
 const SUN_DIRECTION = new THREE.Vector3(-0.9, 1.6, 0.42);
 SUN_DIRECTION.normalize();
-
-const SUN_COLOR = "#fff2df";
-const SUN_INTENSITY = 2.6;
 
 const SHADOW_MAP_SIZE = 2048;
 const SHADOW_PADDING = 2.5;
@@ -18,6 +17,9 @@ const SHADOW_RADIUS = 9;
 const SHADOW_BIAS = -0.0003;
 const SHADOW_NORMAL_BIAS = 0.02;
 const SUN_DISTANCE_PADDING = 12;
+
+// How far a room's ceiling lamp hangs below its ceiling slab.
+const LAMP_DROP = 0.28;
 
 const SKY_WIDTH = 128;
 const SKY_HEIGHT = 64;
@@ -149,8 +151,11 @@ function createSkyTexture(): THREE.DataTexture {
 export function Lighting() {
   const rooms = useHouseStore((s) => s.house.rooms);
   const objects = useHouseStore((s) => s.house.objects);
+  const lightingPreset = useEditorStore((s) => s.lightingPreset);
   const sunRef = useRef<THREE.DirectionalLight>(null);
   const gl = useThree((s) => s.gl);
+
+  const spec = LIGHTING_PRESET_SPECS[lightingPreset];
 
   const sunTarget = useMemo(() => new THREE.Object3D(), []);
   const skyTexture = useMemo(() => createSkyTexture(), []);
@@ -159,8 +164,8 @@ export function Lighting() {
 
   useLayoutEffect(() => {
     gl.toneMapping = THREE.ACESFilmicToneMapping;
-    gl.toneMappingExposure = 1;
-  }, [gl]);
+    gl.toneMappingExposure = spec.exposure;
+  }, [gl, spec.exposure]);
 
   const bounds = useMemo(() => computeSceneBounds(), [rooms, objects]);
   const contact = useMemo(() => {
@@ -223,6 +228,10 @@ export function Lighting() {
   return (
     <group>
       <Environment map={skyTexture} />
+      <ambientLight color={spec.ambientColor} intensity={spec.ambientIntensity} />
+      <hemisphereLight
+        args={[spec.hemiSky, spec.hemiGround, spec.hemiIntensity]}
+      />
       <ContactShadows
         position={[contact.x, 0.035, contact.z]}
         scale={contactScale.current}
@@ -234,8 +243,8 @@ export function Lighting() {
       <primitive object={sunTarget} />
       <directionalLight
         ref={sunRef}
-        color={SUN_COLOR}
-        intensity={SUN_INTENSITY}
+        color={spec.sunColor}
+        intensity={spec.sunIntensity}
         position={[
           SUN_DIRECTION.x * 30,
           SUN_DIRECTION.y * 30,
@@ -244,6 +253,19 @@ export function Lighting() {
         target={sunTarget}
         castShadow
       />
+      {Object.values(rooms).map((room) => (
+        <pointLight
+          key={room.id}
+          color={spec.lampColor}
+          position={[
+            room.position.x + room.width / 2,
+            Math.max(0.6, room.height - LAMP_DROP),
+            room.position.z + room.depth / 2,
+          ]}
+          intensity={spec.lampBase + room.width * room.depth * spec.lampPerM2}
+          decay={2}
+        />
+      ))}
     </group>
   );
 }

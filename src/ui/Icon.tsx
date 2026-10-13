@@ -37,7 +37,10 @@ export type IconName =
   | "plus"
   | "minus"
   | "walk"
-  | "close";
+  | "close"
+  | "copy"
+  | "flip"
+  | "sun";
 
 const PATHS: Record<IconName, string> = {
   home: "M4 11.5 12 4l8 7.5M6 10.5V20h12v-9.5M10 20v-5h4v5",
@@ -74,6 +77,9 @@ const PATHS: Record<IconName, string> = {
   minus: "M5 12h14",
   walk: "M13 3.1a1.5 1.5 0 1 0 0.01 0M13 6.6l-2 5.4M11 12l-1.7 4.4L7 21M11 12l2.7 3.5L15 21M12.4 8.7 8.8 10M12.6 8.7 16.2 10.4",
   close: "M6 6l12 12M18 6 6 18",
+  copy: "M9 9h10v10H9zM5 15V5h10",
+  flip: "M12 3v18M9 9 5 12l4 3M15 9l4 3-4 3",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
 };
 
 export function Icon({ name, size = 14, className }: IconProps) {

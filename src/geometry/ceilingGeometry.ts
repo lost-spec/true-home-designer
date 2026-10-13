@@ -1,7 +1,21 @@
 import type { Room } from "../types/house";
 import { CEILING_THICKNESS } from "../types/house";
 import type { BoxSpec } from "./wallGeometry";
+import { roomBaseRects } from "./roomGeometry";
 
+/** One ceiling slab per footprint rectangle (1 for a box room, 2 for an L). */
+export function getCeilingBoxes(room: Room): BoxSpec[] {
+  return roomBaseRects(room).map((rect) => ({
+    position: [
+      rect.x + rect.width / 2,
+      room.height + CEILING_THICKNESS / 2,
+      rect.z + rect.depth / 2,
+    ],
+    size: [rect.width, CEILING_THICKNESS, rect.depth],
+  }));
+}
+
+/** Single bounding slab covering the whole footprint. */
 export function getCeilingBox(room: Room): BoxSpec {
   return {
     position: [

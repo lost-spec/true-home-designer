@@ -1,18 +1,20 @@
 import { useMemo } from "react";
 import { useHouseStore } from "../store/houseStore";
-import { getCeilingBox } from "../geometry/ceilingGeometry";
-
-const CEILING_COLOR = "#f2efe9";
+import { getCeilingBoxes } from "../geometry/ceilingGeometry";
 
 export function CeilingMesh({ roomId }: { roomId: string }) {
   const room = useHouseStore((s) => s.house.rooms[roomId]);
 
-  const box = useMemo(() => getCeilingBox(room), [room]);
+  const boxes = useMemo(() => getCeilingBoxes(room), [room]);
 
   return (
-    <mesh name="room-ceiling" position={box.position} receiveShadow>
-      <boxGeometry args={box.size} />
-      <meshStandardMaterial color={CEILING_COLOR} roughness={0.95} />
-    </mesh>
+    <group name="room-ceiling">
+      {boxes.map((box, index) => (
+        <mesh key={index} position={box.position} receiveShadow>
+          <boxGeometry args={box.size} />
+          <meshStandardMaterial color={room.surfaces.ceiling} roughness={0.95} />
+        </mesh>
+      ))}
+    </group>
   );
 }

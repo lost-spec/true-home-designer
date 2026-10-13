@@ -1,17 +1,17 @@
 import { useSyncExternalStore } from "react";
 import { SNAP_OPTIONS, useEditorStore, type Tool } from "../store/editorStore";
+import {
+  LIGHTING_PRESETS,
+  LIGHTING_PRESET_SPECS,
+} from "../scene/lightingPresets";
 import { useHouseStore } from "../store/houseStore";
 import { getHistoryFlags, subscribeHistory } from "../store/history";
-import { firstWallUser } from "../geometry/roomGeometry";
 import { zoomCamera } from "../interaction/cameraZoom";
 import { DesignControls } from "./DesignControls";
 import { Icon, type IconName } from "./Icon";
-import type { RoomId } from "../types/house";
 
-const TOOLS: { id: Tool; label: string; icon: IconName; compact?: boolean }[] = [
+const TOOLS: { id: Tool; label: string; icon: IconName }[] = [
   { id: "select", label: "Select", icon: "cursor" },
-  { id: "drawRoom", label: "Draw room", icon: "room", compact: true },
-  { id: "drawWall", label: "Draw wall", icon: "wall", compact: true },
   { id: "placeObject", label: "Place object", icon: "place" },
 ];
 
@@ -22,10 +22,10 @@ export function Toolbar() {
   const toggleCeiling = useEditorStore((s) => s.toggleCeiling);
   const snapSize = useEditorStore((s) => s.snapSize);
   const setSnapSize = useEditorStore((s) => s.setSnapSize);
+  const lightingPreset = useEditorStore((s) => s.lightingPreset);
+  const setLightingPreset = useEditorStore((s) => s.setLightingPreset);
   const placingAssetId = useEditorStore((s) => s.placingAssetId);
   const selection = useEditorStore((s) => s.selection);
-  const viewMode = useEditorStore((s) => s.viewMode);
-  const setViewMode = useEditorStore((s) => s.setViewMode);
   const history = useSyncExternalStore(
     subscribeHistory,
     getHistoryFlags,
@@ -45,22 +45,6 @@ export function Toolbar() {
     if (id) useEditorStore.getState().select({ kind: "opening", id });
   };
 
-  const createRoom = () => {
-    const house = useHouseStore.getState().house;
-    const selection = useEditorStore.getState().selection;
-    let relativeTo: RoomId | undefined;
-    if (selection?.kind === "room" && house.rooms[selection.id]) {
-      relativeTo = selection.id;
-    } else if (selection?.kind === "wall") {
-      relativeTo = firstWallUser(house, selection.id)?.roomId;
-    } else if (selection?.kind === "opening") {
-      const opening = house.openings[selection.id];
-      if (opening) relativeTo = firstWallUser(house, opening.wallId)?.roomId;
-    }
-    const id = useHouseStore.getState().addRoom({ relativeTo });
-    useEditorStore.getState().select({ kind: "room", id });
-  };
-
   return (
     <header className="toolbar">
       <span className="toolbar-title">
@@ -69,6 +53,16 @@ export function Toolbar() {
       </span>
       <span className="toolbar-sep" />
       <DesignControls />
+      <span className="toolbar-sep" />
+      <div className="toolbar-group">
+        <button
+          onClick={() => useEditorStore.getState().openStartScreen()}
+          title="Pick a different room template"
+        >
+          <Icon name="home" size={13} />
+          Templates
+        </button>
+      </div>
       <span className="toolbar-sep" />
       <div className="toolbar-group">
         <button
@@ -97,20 +91,16 @@ export function Toolbar() {
             disabled={
               entry.id === "select"
                 ? false
-                : entry.id === "placeObject"
-                  ? !placingAssetId && tool !== "placeObject"
-                  : true
+                : !placingAssetId && tool !== "placeObject"
             }
             title={
               entry.id === "select"
                 ? "Click geometry to select it"
-                : entry.id === "placeObject"
-                  ? placingAssetId
-                    ? tool === "placeObject"
-                      ? "Placing an asset — click to cancel"
-                      : `Resume placing ${placingAssetId}`
-                    : "Select an asset in the sidebar to place"
-                  : "Coming in a later milestone"
+                : placingAssetId
+                  ? tool === "placeObject"
+                    ? "Placing an asset — click to cancel"
+                    : `Resume placing ${placingAssetId}`
+                  : "Select an asset in the sidebar to place"
             }
             onClick={() => {
               if (entry.id === "placeObject") {
@@ -121,13 +111,9 @@ export function Toolbar() {
             }}
           >
             <Icon name={entry.icon} size={13} />
-            {entry.compact ? null : entry.label}
+            {entry.label}
           </button>
         ))}
-        <button onClick={createRoom} title="Add a new room beside the selection">
-          <Icon name="roomAdd" size={13} />
-          Create room
-        </button>
         <button
           disabled={!selectedWallId}
           title={
@@ -155,6 +141,23 @@ export function Toolbar() {
       </div>
       <span className="toolbar-spacer" />
       <div className="toolbar-group">
+        <label className="toolbar-snap" title="Lighting look for the interior">
+          <Icon name="sun" size={13} />
+          Light
+          <select
+            value={lightingPreset}
+            onChange={(event) =>
+              setLightingPreset(event.target.value as typeof lightingPreset)
+            }
+          >
+            {LIGHTING_PRESETS.map((preset) => (
+              <option key={preset} value={preset}>
+                {LIGHTING_PRESET_SPECS[preset].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="toolbar-sep" />
         <label className="toolbar-snap" title="Grid snapping for wall drags">
           <Icon name="magnet" size={13} />
           Snap
@@ -173,58 +176,19 @@ export function Toolbar() {
         <button
           className={ceilingVisible ? "active" : ""}
           onClick={toggleCeiling}
-          disabled={viewMode !== "3d"}
-          title={
-            viewMode === "3d"
-              ? "Toggle ceiling visibility"
-              : "Ceiling control is available in the 3D view"
-          }
+          title="Toggle ceiling visibility"
         >
           <Icon name="layers" size={13} />
           {ceilingVisible ? "Hide ceiling" : "Show ceiling"}
         </button>
-        <button
-          onClick={() => zoomCamera(1)}
-          disabled={viewMode !== "3d"}
-          title={
-            viewMode === "3d"
-              ? "Zoom the view in ( + )"
-              : "Zoom is available in the 3D view"
-          }
-        >
+        <button onClick={() => zoomCamera(1)} title="Zoom the view in ( + )">
           <Icon name="zoomIn" size={13} />
           Zoom in
         </button>
-        <button
-          onClick={() => zoomCamera(-1)}
-          disabled={viewMode !== "3d"}
-          title={
-            viewMode === "3d"
-              ? "Zoom the view out ( − )"
-              : "Zoom is available in the 3D view"
-          }
-        >
+        <button onClick={() => zoomCamera(-1)} title="Zoom the view out ( − )">
           <Icon name="zoomOut" size={13} />
           Zoom out
         </button>
-        <div className="seg" role="group" aria-label="View mode">
-          <button
-            className={viewMode === "3d" ? "active" : ""}
-            title="Switch to the 3D view"
-            onClick={() => setViewMode("3d")}
-          >
-            <Icon name="cube" size={13} />
-            3D view
-          </button>
-          <button
-            className={viewMode === "2d" ? "active" : ""}
-            title="Switch to the 2D floor plan"
-            onClick={() => setViewMode("2d")}
-          >
-            <Icon name="plan" size={13} />
-            2D plan
-          </button>
-        </div>
       </div>
     </header>
   );

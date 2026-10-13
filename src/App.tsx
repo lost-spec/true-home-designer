@@ -1,10 +1,10 @@
 import { Canvas } from "@react-three/fiber";
 import { Scene } from "./scene/Scene";
-import { FloorPlan2D } from "./plan2d/FloorPlan2D";
 import { Toolbar } from "./ui/Toolbar";
 import { Inspector } from "./ui/Inspector";
 import { AssetPanel } from "./ui/AssetPanel";
 import { RoomDimensionsPanel } from "./ui/RoomDimensionsPanel";
+import { StartScreen } from "./ui/StartScreen";
 import { Icon } from "./ui/Icon";
 import { useEditorStore } from "./store/editorStore";
 import { useHouseStore } from "./store/houseStore";
@@ -26,11 +26,11 @@ function panelTitle(): string {
 export default function App() {
   const select = useEditorStore((s) => s.select);
   const placingAssetId = useEditorStore((s) => s.placingAssetId);
-  const viewMode = useEditorStore((s) => s.viewMode);
   const navigationMode = useEditorStore((s) => s.navigationMode);
   const toggleNavigationMode = useEditorStore((s) => s.toggleNavigationMode);
   const selection = useEditorStore((s) => s.selection);
   const rightPanelOpen = useEditorStore((s) => s.rightPanelOpen);
+  const startScreenOpen = useEditorStore((s) => s.startScreenOpen);
   // Re-evaluate the contextual title whenever the selection changes.
   const title = panelTitle();
 
@@ -85,33 +85,31 @@ export default function App() {
   return (
     <div className="app">
       <Toolbar />
+      {startScreenOpen ? <StartScreen /> : null}
       <div className="workspace">
         <AssetPanel />
         <div className="viewport">
           <Canvas
             shadows="percentage"
             dpr={[1, 2]}
-            camera={{ position: [9, 7, 9], fov: 50 }}
+            camera={{ position: [-1.8, 2.2, -1.6], fov: 55 }}
             onPointerMissed={handlePointerMissed}
-            style={{ display: viewMode === "3d" ? undefined : "none" }}
           >
             <Scene />
           </Canvas>
-          {viewMode === "3d" ? (
-            <button
-              type="button"
-              className={walking ? "walk-toggle active" : "walk-toggle"}
-              title={
-                walking
-                  ? "Leave walk mode (Esc)"
-                  : "Walk through the design — WASD to move, mouse to look (F)"
-              }
-              onClick={toggleWalk}
-            >
-              <Icon name={walking ? "close" : "walk"} size={15} />
-              {walking ? "Exit walk" : "Walk through"}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={walking ? "walk-toggle active" : "walk-toggle"}
+            title={
+              walking
+                ? "Leave walk mode (Esc)"
+                : "Walk through the design — WASD to move, mouse to look (F)"
+            }
+            onClick={toggleWalk}
+          >
+            <Icon name={walking ? "close" : "walk"} size={15} />
+            {walking ? "Exit walk" : "Walk through"}
+          </button>
           {walking ? (
             <>
               <div className="walk-reticle" aria-hidden="true" />
@@ -133,11 +131,10 @@ export default function App() {
               </div>
             </>
           ) : null}
-          {viewMode === "2d" ? <FloorPlan2D /> : null}
           {placingAsset ? (
             <div className="placement-hint">
-              {viewMode === "2d" ? "Click the plan" : "Click the floor"} to
-              place the {placingAsset.name} · R to rotate · Esc to cancel
+              Click the floor to place the {placingAsset.name} · R to rotate · Esc to
+              cancel
             </div>
           ) : null}
         </div>

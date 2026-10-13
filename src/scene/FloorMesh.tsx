@@ -1,11 +1,8 @@
 import { useMemo } from "react";
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
-import { getFloorBox } from "../geometry/floorGeometry";
+import { getFloorBoxes } from "../geometry/floorGeometry";
 import { towardSelection } from "./selectionColor";
-
-const FLOOR_COLOR = "#cfc7ba";
-const FLOOR_SELECTED = towardSelection(FLOOR_COLOR, 0.22);
 
 export function FloorMesh({ roomId }: { roomId: string }) {
   const room = useHouseStore((s) => s.house.rooms[roomId]);
@@ -14,13 +11,13 @@ export function FloorMesh({ roomId }: { roomId: string }) {
     (s) => s.selection?.kind === "room" && s.selection.id === roomId,
   );
 
-  const box = useMemo(() => getFloorBox(room), [room]);
+  const boxes = useMemo(() => getFloorBoxes(room), [room]);
+  const base = room.surfaces.floor;
+  const color = isSelected ? towardSelection(base, 0.22) : base;
 
   return (
-    <mesh
+    <group
       name="room-floor"
-      position={box.position}
-      receiveShadow
       onClick={(event) => {
         event.stopPropagation();
         const state = useEditorStore.getState();
@@ -30,11 +27,12 @@ export function FloorMesh({ roomId }: { roomId: string }) {
         select({ kind: "room", id: roomId });
       }}
     >
-      <boxGeometry args={box.size} />
-      <meshStandardMaterial
-        color={isSelected ? FLOOR_SELECTED : FLOOR_COLOR}
-        roughness={0.9}
-      />
-    </mesh>
+      {boxes.map((box, index) => (
+        <mesh key={index} position={box.position} receiveShadow>
+          <boxGeometry args={box.size} />
+          <meshStandardMaterial color={color} roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
   );
 }

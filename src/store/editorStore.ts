@@ -1,9 +1,11 @@
 import { create } from "zustand";
 import type { Vec2 } from "../types/house";
+import type { LightingPreset } from "../scene/lightingPresets";
 
-export type Tool = "select" | "drawRoom" | "drawWall" | "placeObject";
+export type Tool = "select" | "placeObject";
 
-export type ViewMode = "3d" | "2d";
+/** The designer is a single 3D view; kept typed for saved-design compatibility. */
+export type ViewMode = "3d";
 
 /** Orbit is the classic turntable; walk is a first-person navigation mode. */
 export type NavigationMode = "orbit" | "walk";
@@ -25,6 +27,7 @@ export interface EditorState {
   navigationMode: NavigationMode;
   ceilingVisible: boolean;
   snapSize: number;
+  lightingPreset: LightingPreset;
   draggingWallId: string | null;
   placingAssetId: string | null;
   placingRotationY: number;
@@ -33,6 +36,7 @@ export interface EditorState {
   draggingOpeningId: string | null;
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
+  startScreenOpen: boolean;
   setTool: (tool: Tool) => void;
   select: (selection: Selection) => void;
   setViewMode: (viewMode: ViewMode) => void;
@@ -41,6 +45,7 @@ export interface EditorState {
   toggleCeiling: () => void;
   setCeilingVisible: (ceilingVisible: boolean) => void;
   setSnapSize: (snapSize: number) => void;
+  setLightingPreset: (preset: LightingPreset) => void;
   setDraggingWallId: (wallId: string | null) => void;
   setPlacingAssetId: (assetId: string | null) => void;
   setPlacingRotationY: (rotationY: number) => void;
@@ -49,6 +54,8 @@ export interface EditorState {
   setDraggingOpeningId: (openingId: string | null) => void;
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
+  openStartScreen: () => void;
+  closeStartScreen: () => void;
 }
 
 const IDLE_PLACEMENT = {
@@ -64,6 +71,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   navigationMode: "orbit",
   ceilingVisible: true,
   snapSize: 0.1,
+  lightingPreset: "bright",
   draggingWallId: null,
   placingAssetId: null,
   placingRotationY: 0,
@@ -72,12 +80,12 @@ export const useEditorStore = create<EditorState>((set) => ({
   draggingOpeningId: null,
   leftPanelOpen: true,
   rightPanelOpen: true,
+  startScreenOpen: true,
   setTool: (tool) => set({ tool, ...IDLE_PLACEMENT }),
   select: (selection) => set({ selection }),
   setViewMode: (viewMode) => {
-    if (viewMode !== "3d" && viewMode !== "2d") return;
-    // The 2D plan has its own camera; never leave walk mode armed there.
-    set(viewMode === "2d" ? { viewMode, navigationMode: "orbit" } : { viewMode });
+    if (viewMode !== "3d") return;
+    set({ viewMode });
   },
   setNavigationMode: (navigationMode) =>
     set(
@@ -96,6 +104,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   setCeilingVisible: (ceilingVisible) => set({ ceilingVisible }),
   setSnapSize: (snapSize) =>
     set({ snapSize: Number.isFinite(snapSize) && snapSize > 0 ? snapSize : 0.1 }),
+  setLightingPreset: (lightingPreset) => set({ lightingPreset }),
   setDraggingWallId: (draggingWallId) => set({ draggingWallId }),
   setPlacingAssetId: (assetId) =>
     set({
@@ -113,4 +122,6 @@ export const useEditorStore = create<EditorState>((set) => ({
   setDraggingOpeningId: (openingId) => set({ draggingOpeningId: openingId }),
   toggleLeftPanel: () => set((state) => ({ leftPanelOpen: !state.leftPanelOpen })),
   toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
+  openStartScreen: () => set({ startScreenOpen: true, selection: null }),
+  closeStartScreen: () => set({ startScreenOpen: false }),
 }));

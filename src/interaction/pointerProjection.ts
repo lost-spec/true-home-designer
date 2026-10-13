@@ -33,6 +33,21 @@ export function groundHitFromClient(
   return { x: hit.x, z: hit.z };
 }
 
+export function hitFromClient(
+  camera: THREE.Camera,
+  dom: HTMLElement,
+  clientX: number,
+  clientY: number,
+  plane: THREE.Plane,
+): { x: number; y: number; z: number } | null {
+  const point = clientToNdc(dom, clientX, clientY);
+  ndc.set(point.x, point.y);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.ray.intersectPlane(plane, scratch);
+  if (!hit) return null;
+  return { x: hit.x, y: hit.y, z: hit.z };
+}
+
 export function projectToClient(
   camera: THREE.Camera,
   dom: HTMLElement,

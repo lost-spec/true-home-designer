@@ -3,15 +3,12 @@ import { useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
-import {
-  createWallDragAnchor,
-  findRoomEdgeForWall,
-  resolveWallDrag,
-} from "./wallInteraction";
+import { createWallDragAnchor, resolveWallDrag } from "./wallInteraction";
 import { GROUND_PLANE, groundHitFromClient } from "./pointerProjection";
 import { beginHistoryBatch, endHistoryBatch } from "../store/history";
 
 const GUARD_FALLBACK_MS = 400;
+const DRAG_THRESHOLD_PX = 4;
 const rayPoint = new THREE.Vector3();
 
 interface DragSession {
@@ -36,33 +33,38 @@ export function useWallDrag(wallId: string) {
       if (session) session.finish(true);
 
       const house = useHouseStore.getState().house;
-      const target = findRoomEdgeForWall(house, wallId);
-      if (!target) return;
-      const room = house.rooms[target.roomId];
-      if (!room) return;
-
       const hit = event.ray.intersectPlane(GROUND_PLANE, rayPoint);
       if (!hit) return;
 
-      event.stopPropagation();
-      // One continuous drag (many pointermove commits) becomes one undo step.
-      beginHistoryBatch();
-
-      const anchor = createWallDragAnchor(target, room, {
+      const anchor = createWallDragAnchor(house, wallId, {
         x: hit.x,
         z: hit.z,
       });
+      if (!anchor) return;
+
+      event.stopPropagation();
+      const down = {
+        clientX: event.nativeEvent.clientX,
+        clientY: event.nativeEvent.clientY,
+      };
       const dom = gl.domElement;
-      const editor = useEditorStore.getState();
-      editor.select({ kind: "wall", id: wallId });
-      editor.setDraggingWallId(wallId);
-
-      if (controls) controls.enabled = false;
       const previousCursor = document.body.style.cursor;
-      document.body.style.cursor = "grabbing";
 
+      let armed = false;
       let listenersActive = true;
       let guardTimer: number | null = null;
+
+      const arm = () => {
+        if (armed) return;
+        armed = true;
+        // One continuous drag (many pointermove commits) becomes one undo step.
+        beginHistoryBatch();
+        const editor = useEditorStore.getState();
+        editor.select({ kind: "wall", id: wallId });
+        editor.setDraggingWallId(wallId);
+        if (controls) controls.enabled = false;
+        document.body.style.cursor = "grabbing";
+      };
 
       const clearGuard = () => {
         if (guardTimer !== null) {
@@ -76,18 +78,24 @@ export function useWallDrag(wallId: string) {
       const finish = (clearGuardNow: boolean) => {
         if (listenersActive) {
           listenersActive = false;
-          endHistoryBatch();
+          if (armed) {
+            endHistoryBatch();
+            if (controls) controls.enabled = true;
+            document.body.style.cursor = previousCursor;
+          }
           window.removeEventListener("pointermove", handleMove);
           window.removeEventListener("pointerup", handleUp);
           window.removeEventListener("pointercancel", handleCancel);
           window.removeEventListener("blur", handleBlur);
-          if (controls) controls.enabled = true;
-          document.body.style.cursor = previousCursor;
           if (clearGuardNow) {
             clearGuard();
             return;
           }
-          guardTimer = window.setTimeout(clearGuard, GUARD_FALLBACK_MS);
+          if (armed) {
+            guardTimer = window.setTimeout(clearGuard, GUARD_FALLBACK_MS);
+          } else {
+            clearGuard();
+          }
           return;
         }
         if (clearGuardNow) clearGuard();
@@ -99,6 +107,12 @@ export function useWallDrag(wallId: string) {
       const handleBlur = () => finish(true);
 
       const handleMove = (moveEvent: PointerEvent) => {
+        if (!armed) {
+          const dx = moveEvent.clientX - down.clientX;
+          const dy = moveEvent.clientY - down.clientY;
+          if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+          arm();
+        }
         const ground = groundHitFromClient(
           camera,
           dom,
@@ -106,8 +120,19 @@ export function useWallDrag(wallId: string) {
           moveEvent.clientY,
         );
         if (!ground) return;
-        const position = resolveWallDrag(anchor, ground, useEditorStore.getState().snapSize);
-        useHouseStore.getState().moveRoomEdge(anchor.roomId, anchor.edge, position);
+        const editor = useEditorStore.getState();
+        // Holding Shift bypasses grid snapping.
+        const snapSize = moveEvent.shiftKey ? 0 : editor.snapSize;
+        const position = resolveWallDrag(anchor, ground, snapSize);
+        if (anchor.kind === "partition") {
+          useHouseStore.getState().movePartition(anchor.wallId, position);
+        } else {
+          useHouseStore.getState().moveRoomEdge(
+            anchor.roomId,
+            anchor.edge,
+            position,
+          );
+        }
       };
 
       window.addEventListener("pointermove", handleMove);

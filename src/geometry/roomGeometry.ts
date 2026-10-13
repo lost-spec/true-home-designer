@@ -1,20 +1,30 @@
 import type {
   House,
+  NotchCorner,
   Opening,
   Room,
   RoomEdge,
   RoomId,
+  RoomNotch,
+  RoomSurfaces,
   Vec2,
   Wall,
   WallId,
 } from "../types/house";
-import { DEFAULT_WALL_HEIGHT, DEFAULT_WALL_THICKNESS } from "../types/house";
+import {
+  DEFAULT_SURFACES,
+  DEFAULT_WALL_HEIGHT,
+  DEFAULT_WALL_THICKNESS,
+} from "../types/house";
 import { normalizeOpening } from "./openingGeometry";
+import { normalizeHex } from "../assets/materialSlots";
 
 export type { RoomEdge };
 
 export const MIN_ROOM_SIZE = 1;
 export const MAX_ROOM_SIZE = 60;
+/** Smallest a notch may be before it is treated as no notch at all. */
+export const NOTCH_MIN = 0.5;
 
 const LINE_EPS = 1e-6;
 
@@ -26,12 +36,20 @@ export interface RoomSpec {
   depth: number;
   height?: number;
   wallThickness?: number;
+  notch?: RoomNotch | null;
+  surfaces?: Partial<RoomSurfaces>;
 }
 
 export interface WallUser {
   roomId: RoomId;
   edge: RoomEdge;
 }
+
+/** Who owns a given wall: one of the four outer edges, a notch face, or the room's partition. */
+export type WallOwner =
+  | { roomId: RoomId; edge: RoomEdge }
+  | { roomId: RoomId; notch: "a" | "b" }
+  | { roomId: RoomId; partition: true };
 
 export interface EdgeSpan {
   run: "x" | "z";
@@ -40,13 +58,12 @@ export interface EdgeSpan {
   to: number;
 }
 
-interface UserRef extends WallUser {
-  span: EdgeSpan;
-}
-
-interface WallLine {
-  run: "x" | "z";
-  coord: number;
+/** An axis-aligned XZ rectangle used to build floor and ceiling slabs. */
+export interface RoomRect {
+  x: number;
+  z: number;
+  width: number;
+  depth: number;
 }
 
 export const ROOM_EDGES: RoomEdge[] = ["south", "east", "north", "west"];
@@ -59,8 +76,121 @@ export function roomWallIds(roomId: string): string[] {
   return ROOM_EDGES.map((edge) => roomWallId(roomId, edge));
 }
 
+export function notchWallId(roomId: string, slot: "a" | "b"): string {
+  return `${roomId}-notch-${slot}`;
+}
+
+export function notchWallIds(roomId: string): string[] {
+  return [notchWallId(roomId, "a"), notchWallId(roomId, "b")];
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Reduce a raw notch against its room: drop it when too small, otherwise clamp
+ * it so the two notch faces stay inside the footprint. Returns the input when
+ * nothing changed so callers can keep referential equality.
+ */
+export function normalizeNotch(room: Room): RoomNotch | null {
+  const notch = room.notch;
+  if (!notch) return null;
+  const maxWidth = room.width - MIN_ROOM_SIZE;
+  const maxDepth = room.depth - MIN_ROOM_SIZE;
+  const width = clamp(notch.width, NOTCH_MIN, Math.max(NOTCH_MIN, maxWidth));
+  const depth = clamp(notch.depth, NOTCH_MIN, Math.max(NOTCH_MIN, maxDepth));
+  if (width < NOTCH_MIN || depth < NOTCH_MIN) return null;
+  if (
+    notch.corner === room.notch?.corner &&
+    width === room.notch.width &&
+    depth === room.notch.depth
+  ) {
+    return notch;
+  }
+  return { corner: notch.corner, width, depth };
+}
+
+function normalizeSurfaces(room: Room): RoomSurfaces {
+  const surfaces = room.surfaces;
+  if (!surfaces) return { ...DEFAULT_SURFACES };
+  return {
+    wall: normalizeHex(surfaces.wall) ?? DEFAULT_SURFACES.wall,
+    floor: normalizeHex(surfaces.floor) ?? DEFAULT_SURFACES.floor,
+    ceiling: normalizeHex(surfaces.ceiling) ?? DEFAULT_SURFACES.ceiling,
+  };
+}
+
+/** Clamp a room's notch and surfaces; returns the same object when unchanged. */
+export function normalizeRoom(input: Room): Room {
+  const notch = normalizeNotch(input);
+  const surfaces = normalizeSurfaces(input);
+  const notchSame = input.notch === notch;
+  const surfacesSame =
+    input.surfaces &&
+    input.surfaces.wall === surfaces.wall &&
+    input.surfaces.floor === surfaces.floor &&
+    input.surfaces.ceiling === surfaces.ceiling;
+  if (notchSame && surfacesSame) return input;
+  return { ...input, notch, surfaces };
+}
+
+interface NotchFrame {
+  nx: number;
+  nz: number;
+  a: EdgeSpan;
+  b: EdgeSpan;
+}
+
+/** Position of the two notch faces for the room, or null when it is a box. */
+export function notchFrame(room: Room): NotchFrame | null {
+  const notch = normalizeNotch(room);
+  if (!notch) return null;
+
+  const x0 = room.position.x;
+  const z0 = room.position.z;
+  const x1 = x0 + room.width;
+  const z1 = z0 + room.depth;
+
+  let nx: number;
+  let nz: number;
+  switch (notch.corner) {
+    case "se":
+      nx = x1 - notch.width;
+      nz = z0 + notch.depth;
+      break;
+    case "sw":
+      nx = x0 + notch.width;
+      nz = z0 + notch.depth;
+      break;
+    case "ne":
+      nx = x1 - notch.width;
+      nz = z1 - notch.depth;
+      break;
+    default:
+      nx = x0 + notch.width;
+      nz = z1 - notch.depth;
+      break;
+  }
+
+  const lowZ = notch.corner === "se" || notch.corner === "sw";
+  const east = notch.corner === "se" || notch.corner === "ne";
+
+  // Wall A is the vertical face at x = nx.
+  const a: EdgeSpan = {
+    run: "z",
+    coord: nx,
+    from: lowZ ? z0 : nz,
+    to: lowZ ? nz : z1,
+  };
+  // Wall B is the horizontal face at z = nz.
+  const b: EdgeSpan = {
+    run: "x",
+    coord: nz,
+    from: east ? nx : x0,
+    to: east ? x1 : nx,
+  };
+  return { nx, nz, a, b };
 }
 
 export function edgeSpan(room: Room, edge: RoomEdge): EdgeSpan {
@@ -68,10 +198,85 @@ export function edgeSpan(room: Room, edge: RoomEdge): EdgeSpan {
   const z0 = room.position.z;
   const x1 = x0 + room.width;
   const z1 = z0 + room.depth;
-  if (edge === "south") return { run: "x", coord: z0, from: x0, to: x1 };
-  if (edge === "north") return { run: "x", coord: z1, from: x0, to: x1 };
-  if (edge === "west") return { run: "z", coord: x0, from: z0, to: z1 };
-  return { run: "z", coord: x1, from: z0, to: z1 };
+
+  let span: EdgeSpan;
+  if (edge === "south") span = { run: "x", coord: z0, from: x0, to: x1 };
+  else if (edge === "north") span = { run: "x", coord: z1, from: x0, to: x1 };
+  else if (edge === "west") span = { run: "z", coord: x0, from: z0, to: z1 };
+  else span = { run: "z", coord: x1, from: z0, to: z1 };
+
+  const frame = notchFrame(room);
+  if (!frame) return span;
+  const corner = room.notch?.corner;
+  if (!corner) return span;
+
+  // Shorten the two outer edges that run up to the notch.
+  if (edge === "south" && (corner === "se" || corner === "sw")) {
+    return corner === "se"
+      ? { ...span, to: frame.nx }
+      : { ...span, from: frame.nx };
+  }
+  if (edge === "north" && (corner === "ne" || corner === "nw")) {
+    return corner === "ne"
+      ? { ...span, to: frame.nx }
+      : { ...span, from: frame.nx };
+  }
+  if (edge === "east" && (corner === "se" || corner === "ne")) {
+    return corner === "se"
+      ? { ...span, from: frame.nz }
+      : { ...span, to: frame.nz };
+  }
+  if (edge === "west" && (corner === "sw" || corner === "nw")) {
+    return corner === "sw"
+      ? { ...span, from: frame.nz }
+      : { ...span, to: frame.nz };
+  }
+  return span;
+}
+
+/**
+ * The room footprint as one or two axis-aligned rectangles. An L-shaped room is
+ * split into a full-width band and a partial band so floors and ceilings can be
+ * built without any triangulation.
+ */
+export function roomBaseRects(room: Room): RoomRect[] {
+  const x0 = room.position.x;
+  const z0 = room.position.z;
+  const full: RoomRect = {
+    x: x0,
+    z: z0,
+    width: room.width,
+    depth: room.depth,
+  };
+  const frame = notchFrame(room);
+  if (!frame) return [full];
+
+  const corner = room.notch?.corner as NotchCorner;
+  const east = corner === "se" || corner === "ne";
+  const lowZ = corner === "se" || corner === "sw";
+
+  const fullBand: RoomRect = lowZ
+    ? { x: x0, z: frame.nz, width: room.width, depth: room.depth - (frame.nz - z0) }
+    : { x: x0, z: z0, width: room.width, depth: frame.nz - z0 };
+
+  const partialBand: RoomRect = lowZ
+    ? {
+        x: east ? x0 : frame.nx,
+        z: z0,
+        width: east ? frame.nx - x0 : x0 + room.width - frame.nx,
+        depth: frame.nz - z0,
+      }
+    : {
+        x: east ? x0 : frame.nx,
+        z: frame.nz,
+        width: east ? frame.nx - x0 : x0 + room.width - frame.nx,
+        depth: z0 + room.depth - frame.nz,
+      };
+
+  const rects = [fullBand, partialBand].filter(
+    (rect) => rect.width > LINE_EPS && rect.depth > LINE_EPS,
+  );
+  return rects.length ? rects : [full];
 }
 
 export function wallSpan(wall: Wall): EdgeSpan | null {
@@ -96,18 +301,6 @@ export function wallSpan(wall: Wall): EdgeSpan | null {
   return null;
 }
 
-function lineMatchesSpan(line: WallLine, span: EdgeSpan): boolean {
-  return span.run === line.run && Math.abs(span.coord - line.coord) <= LINE_EPS;
-}
-
-function lineMatches(a: EdgeSpan, b: EdgeSpan): boolean {
-  return a.run === b.run && Math.abs(a.coord - b.coord) <= LINE_EPS;
-}
-
-function overlapOf(a: EdgeSpan, b: EdgeSpan): number {
-  return Math.min(a.to, b.to) - Math.max(a.from, b.from);
-}
-
 export function wallUsers(house: House, wallId: WallId): WallUser[] {
   const users: WallUser[] = [];
   for (const room of Object.values(house.rooms)) {
@@ -127,50 +320,123 @@ export function firstWallUser(house: House, wallId: WallId): WallUser | null {
   return null;
 }
 
-function resolveLine(
-  stored: EdgeSpan | null,
-  users: UserRef[],
-): WallLine | null {
-  if (stored && users.some((u) => lineMatches(u.span, stored))) {
-    return { run: stored.run, coord: stored.coord };
+/** Resolve any wall id (outer edge, notch face, or partition) back to its room. */
+export function roomForWall(house: House, wallId: WallId): WallOwner | null {
+  const wall = house.walls[wallId];
+  if (wall?.partition && wall.roomId) {
+    return house.rooms[wall.roomId]
+      ? { roomId: wall.roomId, partition: true }
+      : null;
   }
-  if (users.length > 0) {
-    return { run: users[0].span.run, coord: users[0].span.coord };
+  for (const room of Object.values(house.rooms)) {
+    for (const edge of ROOM_EDGES) {
+      if (room.edges[edge] === wallId) return { roomId: room.id, edge };
+    }
+    if (room.notch) {
+      if (notchWallId(room.id, "a") === wallId) {
+        return { roomId: room.id, notch: "a" };
+      }
+      if (notchWallId(room.id, "b") === wallId) {
+        return { roomId: room.id, notch: "b" };
+      }
+    }
   }
-  if (stored) return { run: stored.run, coord: stored.coord };
   return null;
 }
 
-function qualification(
-  wall: Wall,
-  line: WallLine | undefined,
-  ourRoomId: RoomId,
-  ourEdge: RoomEdge,
-  ourSpan: EdgeSpan,
-  refUsers: Map<WallId, UserRef[]>,
-  wallId: WallId,
-): number {
-  if (!line || !lineMatchesSpan(line, ourSpan)) return -1;
-  const users = refUsers.get(wallId) ?? [];
-  const others = users.filter(
-    (u) => !(u.roomId === ourRoomId && u.edge === ourEdge),
-  );
-  if (others.length === 0) return Number.POSITIVE_INFINITY;
-  const collinear = others.filter((u) => lineMatchesSpan(line, u.span));
-  if (collinear.length === 0) {
-    const stored = wallSpan(wall);
-    if (!stored) return -1;
-    const overlap = overlapOf(stored, ourSpan);
-    return overlap > LINE_EPS ? overlap : -1;
-  }
-  const from = Math.min(...collinear.map((u) => u.span.from));
-  const to = Math.max(...collinear.map((u) => u.span.to));
-  const overlap = overlapOf({ run: line.run, coord: line.coord, from, to }, ourSpan);
-  return overlap > LINE_EPS ? overlap : -1;
+export function partitionWallId(roomId: RoomId, index: number): WallId {
+  return `${roomId}-partition-${index}`;
 }
 
-function buildWall(room: Room, edge: RoomEdge, span: EdgeSpan): Wall {
-  const sign = edge === "south" || edge === "east" ? 1 : -1;
+/** Returns the room's partition walls in stable, deterministic order. */
+export function partitionWalls(house: House, roomId: RoomId): Wall[] {
+  return Object.values(house.walls)
+    .filter((wall) => wall.partition && wall.roomId === roomId)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** The full-span span a partition occupies; run "x" runs along Z at Z = coord. */
+export function partitionWallSpan(
+  room: Room,
+  run: "x" | "z",
+  coord: number,
+): EdgeSpan {
+  const x0 = room.position.x;
+  const z0 = room.position.z;
+  const x1 = x0 + room.width;
+  const z1 = z0 + room.depth;
+  return run === "x"
+    ? { run: "x", coord, from: x0, to: x1 }
+    : { run: "z", coord, from: z0, to: z1 };
+}
+
+export function buildPartitionWall(
+  id: WallId,
+  room: Room,
+  run: "x" | "z",
+  coord: number,
+): Wall {
+  const span = partitionWallSpan(room, run, coord);
+  return {
+    ...buildWallFromSpan(id, span, 1, room.height, room.wallThickness),
+    partition: true,
+    roomId: room.id,
+  };
+}
+
+/**
+ * A partition at an explicit coordinate: clamped to the footprint, the span is
+ * forced to the full room width/depth and the wall inherits the room's height
+ * and thickness.
+ */
+export function movePartitionWall(
+  room: Room,
+  wall: Wall,
+  coord: number,
+): Wall {
+  const span = wallSpan(wall);
+  const run = span?.run === "x" ? "x" : "z";
+  const min = run === "x" ? room.position.z : room.position.x;
+  const max =
+    run === "x" ? room.position.z + room.depth : room.position.x + room.width;
+  return buildPartitionWall(wall.id, room, run, clamp(coord, min, max));
+}
+
+/**
+ * Rebuild a partition against the room it belongs to: clamp its current
+ * coordinate to the footprint and force the full span.
+ */
+export function rebuildPartition(room: Room, wall: Wall): Wall {
+  const span = wallSpan(wall);
+  return movePartitionWall(
+    room,
+    wall,
+    span?.run === "x" || span?.run === "z" ? span.coord : wall.start.x,
+  );
+}
+
+/**
+ * Carry per-wall styling from an old rebuild onto a new one, so colour and
+ * baseboard edits survive room changes. Returns the new wall untouched when
+ * there is nothing to carry.
+ */
+export function carryOverrides(prev: Wall | undefined, next: Wall): Wall {
+  if (!prev || (prev.color === undefined && prev.baseboard === undefined)) {
+    return next;
+  }
+  const carried: Wall = { ...next };
+  if (prev.color !== undefined) carried.color = prev.color;
+  if (prev.baseboard !== undefined) carried.baseboard = prev.baseboard;
+  return carried;
+}
+
+function buildWallFromSpan(
+  id: WallId,
+  span: EdgeSpan,
+  sign: number,
+  height: number,
+  thickness: number,
+): Wall {
   const startCoord = sign > 0 ? span.from : span.to;
   const endCoord = sign > 0 ? span.to : span.from;
   const start =
@@ -181,61 +447,39 @@ function buildWall(room: Room, edge: RoomEdge, span: EdgeSpan): Wall {
     span.run === "x"
       ? { x: endCoord, z: span.coord }
       : { x: span.coord, z: endCoord };
-  return {
-    id: roomWallId(room.id, edge),
-    start,
-    end,
-    height: room.height,
-    thickness: room.wallThickness,
-  };
+  return { id, start, end, height, thickness };
 }
 
-function rebuildWall(
-  previous: Wall,
-  spans: EdgeSpan[],
-  heights: number[],
-  thicknesses: number[],
-): Wall {
-  const collinear = spans.every((s) => lineMatches(s, spans[0]));
-  const stored = wallSpan(previous);
-  const base = collinear ? spans[0] : (stored ?? spans[0]);
-  const run = base.run;
-  const coord = base.coord;
-  const from = Math.min(...spans.map((s) => s.from));
-  const to = Math.max(...spans.map((s) => s.to));
-
-  const startRun = previous.start[run];
-  const endRun = previous.end[run];
-  const sign =
-    Math.abs(endRun - startRun) > LINE_EPS ? Math.sign(endRun - startRun) : 1;
-  const startCoord = sign > 0 ? from : to;
-  const endCoord = sign > 0 ? to : from;
-
-  const start =
-    run === "x" ? { x: startCoord, z: coord } : { x: coord, z: startCoord };
-  const end =
-    run === "x" ? { x: endCoord, z: coord } : { x: coord, z: endCoord };
-
-  return {
-    id: previous.id,
-    start,
-    end,
-    height: Math.max(...heights),
-    thickness: Math.max(...thicknesses),
-  };
-}
-
-function sameVec(a: Vec2, b: Vec2): boolean {
-  return a.x === b.x && a.z === b.z;
-}
-
-function sameWall(a: Wall, b: Wall): boolean {
-  return (
-    sameVec(a.start, b.start) &&
-    sameVec(a.end, b.end) &&
-    a.height === b.height &&
-    a.thickness === b.thickness
+function buildWall(room: Room, edge: RoomEdge, span: EdgeSpan): Wall {
+  const sign = edge === "south" || edge === "east" ? 1 : -1;
+  return buildWallFromSpan(
+    roomWallId(room.id, edge),
+    span,
+    sign,
+    room.height,
+    room.wallThickness,
   );
+}
+
+export function notchWalls(room: Room): Wall[] {
+  const frame = notchFrame(room);
+  if (!frame) return [];
+  return [
+    buildWallFromSpan(
+      notchWallId(room.id, "a"),
+      frame.a,
+      1,
+      room.height,
+      room.wallThickness,
+    ),
+    buildWallFromSpan(
+      notchWallId(room.id, "b"),
+      frame.b,
+      1,
+      room.height,
+      room.wallThickness,
+    ),
+  ];
 }
 
 function openingCenter(
@@ -284,8 +528,6 @@ function migrateOpening(
     Math.max(0, length - opening.width),
   );
 
-  // Re-derive every field against the surviving wall: a wall that shrank in
-  // height must also shrink (or floor) the opening it carries.
   const fields = normalizeOpening(target, opening.kind, {
     offset,
     width: opening.width,
@@ -304,159 +546,55 @@ function migrateOpening(
   return { ...opening, ...fields };
 }
 
+/**
+ * Rebuild the walls for every room from its footprint. With a single room this
+ * is a direct regeneration: four outer edges plus the notch faces, keeping each
+ * wall id stable so openings migrate in place. Orphans are dropped.
+ */
 export function reconcile(input: House): House {
-  const rooms = Object.values(input.rooms);
-
-  const work: { room: Room; edge: RoomEdge; span: EdgeSpan }[] = [];
-  const refUsers = new Map<WallId, UserRef[]>();
-  for (const room of rooms) {
-    for (const edge of ROOM_EDGES) {
-      const span = edgeSpan(room, edge);
-      work.push({ room, edge, span });
-      const refId = room.edges[edge];
-      const user: UserRef = { roomId: room.id, edge, span };
-      const list = refUsers.get(refId);
-      if (list) list.push(user);
-      else refUsers.set(refId, [user]);
-    }
-  }
-
-  const pool: Record<WallId, Wall> = {};
-  for (const [id, wall] of Object.entries(input.walls)) {
-    if ((refUsers.get(id)?.length ?? 0) > 0) pool[id] = wall;
-  }
-
-  const resolved = new Map<WallId, WallLine>();
-  for (const [id, wall] of Object.entries(pool)) {
-    const line = resolveLine(wallSpan(wall), refUsers.get(id) ?? []);
-    if (line) resolved.set(id, line);
-  }
-
-  const assigned = new Map<WallId, EdgeSpan[]>();
-  const assignedHeights = new Map<WallId, number[]>();
-  const assignedThickness = new Map<WallId, number[]>();
-  const edgePatches = new Map<RoomId, Partial<Record<RoomEdge, WallId>>>();
-
-  for (const item of work) {
-    const refId = item.room.edges[item.edge];
-    const refWall = pool[refId];
-    let chosen: WallId | null = null;
-
-    if (refWall) {
-      const score = qualification(
-        refWall,
-        resolved.get(refId),
-        item.room.id,
-        item.edge,
-        item.span,
-        refUsers,
-        refId,
-      );
-      if (score > LINE_EPS) chosen = refId;
-    }
-
-    if (chosen === null) {
-      let bestId: WallId | null = null;
-      let bestScore = -1;
-      for (const [id, wall] of Object.entries(pool)) {
-        if (id === refId) continue;
-        const score = qualification(
-          wall,
-          resolved.get(id),
-          item.room.id,
-          item.edge,
-          item.span,
-          refUsers,
-          id,
-        );
-        if (score <= LINE_EPS) continue;
-        if (
-          score > bestScore + LINE_EPS ||
-          (Math.abs(score - bestScore) <= LINE_EPS &&
-            (bestId === null || id < bestId))
-        ) {
-          bestId = id;
-          bestScore = score;
-        }
-      }
-      chosen = bestId;
-    }
-
-    if (chosen === null) {
-      let candidateId = roomWallId(item.room.id, item.edge);
-      while (pool[candidateId]) candidateId = `${candidateId}-x`;
-      chosen = candidateId;
-      pool[chosen] = buildWall(item.room, item.edge, item.span);
-    }
-
-    if (chosen !== refId) {
-      let patch = edgePatches.get(item.room.id);
-      if (!patch) {
-        patch = {};
-        edgePatches.set(item.room.id, patch);
-      }
-      patch[item.edge] = chosen;
-    }
-
-    const spanList = assigned.get(chosen);
-    if (spanList) spanList.push(item.span);
-    else assigned.set(chosen, [item.span]);
-    const heightList = assignedHeights.get(chosen);
-    if (heightList) heightList.push(item.room.height);
-    else assignedHeights.set(chosen, [item.room.height]);
-    const thicknessList = assignedThickness.get(chosen);
-    if (thicknessList) thicknessList.push(item.room.wallThickness);
-    else assignedThickness.set(chosen, [item.room.wallThickness]);
-  }
-
   const walls: Record<WallId, Wall> = {};
-  for (const [id, wall] of Object.entries(pool)) {
-    const spans = assigned.get(id);
-    if (!spans || spans.length === 0) continue;
-    const rebuilt = rebuildWall(
-      wall,
-      spans,
-      assignedHeights.get(id) ?? [wall.height],
-      assignedThickness.get(id) ?? [wall.thickness],
-    );
-    walls[id] = sameWall(wall, rebuilt) ? wall : rebuilt;
-  }
-
   const roomsOut: Record<RoomId, Room> = {};
-  for (const room of rooms) {
-    const patch = edgePatches.get(room.id);
-    roomsOut[room.id] = patch
-      ? { ...room, edges: { ...room.edges, ...patch } }
-      : room;
+
+  for (const room of Object.values(input.rooms)) {
+    const base = normalizeRoom(room);
+    for (const edge of ROOM_EDGES) {
+      const id = base.edges[edge];
+      const next = buildWall(base, edge, edgeSpan(base, edge));
+      const prev = input.walls[id];
+      walls[id] =
+        prev && sameWall(prev, next)
+          ? prev
+          : carryOverrides(prev, next);
+    }
+    for (const wall of notchWalls(base)) {
+      const prev = input.walls[wall.id];
+      walls[wall.id] =
+        prev && sameWall(prev, wall)
+          ? prev
+          : carryOverrides(prev, wall);
+    }
+    for (const wall of Object.values(input.walls)) {
+      if (!wall.partition || wall.roomId !== room.id) continue;
+      if (base.notch) continue;
+      const rebuilt = rebuildPartition(base, wall);
+      const prev = input.walls[wall.id];
+      walls[wall.id] =
+        prev && sameWall(prev, rebuilt)
+          ? prev
+          : carryOverrides(prev, rebuilt);
+    }
+    roomsOut[room.id] = base;
   }
 
   const openings: Record<string, Opening> = {};
   for (const opening of Object.values(input.openings)) {
-    const oldWall = input.walls[opening.wallId];
     const target = walls[opening.wallId];
-    if (target) {
-      const migrated = migrateOpening(opening, oldWall, target);
-      if (migrated) openings[migrated.id] = migrated;
-      continue;
-    }
-    if (!oldWall) continue;
-    const oldSpan = wallSpan(oldWall);
-    if (!oldSpan) continue;
-    let transfer: Wall | null = null;
-    const center = openingCenter(oldWall, opening, oldSpan.run);
-    if (center !== null) {
-      for (const wall of Object.values(walls)) {
-        const span = wallSpan(wall);
-        if (!span || span.run !== oldSpan.run) continue;
-        if (Math.abs(span.coord - oldSpan.coord) > LINE_EPS) continue;
-        if (center >= span.from - LINE_EPS && center <= span.to + LINE_EPS) {
-          transfer = wall;
-          break;
-        }
-      }
-    }
-    if (!transfer) continue;
-    const migrated = migrateOpening(opening, oldWall, transfer);
+    if (!target) continue;
+    const migrated = migrateOpening(
+      opening,
+      input.walls[opening.wallId],
+      target,
+    );
     if (migrated) openings[migrated.id] = migrated;
   }
 
@@ -467,6 +605,19 @@ export function reconcile(input: House): House {
     openings,
     objects: input.objects,
   };
+}
+
+function sameVec(a: Vec2, b: Vec2): boolean {
+  return a.x === b.x && a.z === b.z;
+}
+
+function sameWall(a: Wall, b: Wall): boolean {
+  return (
+    sameVec(a.start, b.start) &&
+    sameVec(a.end, b.end) &&
+    a.height === b.height &&
+    a.thickness === b.thickness
+  );
 }
 
 export function moveRoomEdgeRect(
@@ -530,10 +681,13 @@ export function createRoom(spec: RoomSpec): { room: Room; walls: Wall[] } {
       north: roomWallId(spec.id, "north"),
       west: roomWallId(spec.id, "west"),
     },
+    notch: spec.notch ?? null,
+    surfaces: { ...DEFAULT_SURFACES, ...spec.surfaces },
   };
 
+  const normalized = normalizeRoom(room);
   const walls = ROOM_EDGES.map((edge) =>
-    buildWall(room, edge, edgeSpan(room, edge)),
-  );
-  return { room, walls };
+    buildWall(normalized, edge, edgeSpan(normalized, edge)),
+  ).concat(notchWalls(normalized));
+  return { room: normalized, walls };
 }

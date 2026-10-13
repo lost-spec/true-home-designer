@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useHouseStore } from "../store/houseStore";
 import { useEditorStore } from "../store/editorStore";
 import {
+  getBaseboardBoxes,
   getOpeningFillBox,
   getOpeningFrameBoxes,
   getWallBoxes,
@@ -10,11 +11,11 @@ import {
 } from "../geometry/wallGeometry";
 import { useWallDrag } from "../interaction/useWallDrag";
 import { useOpeningDrag } from "../interaction/useOpeningDrag";
+import { roomForWall } from "../geometry/roomGeometry";
 import type { Opening } from "../types/house";
 import { towardSelection } from "./selectionColor";
 
 const WALL_COLOR = "#e9e4dc";
-const WALL_SELECTED = towardSelection(WALL_COLOR, 0.28);
 const DOOR_COLOR = "#8a5a2b";
 const DOOR_FRAME_COLOR = "#5f3d1d";
 const WINDOW_COLOR = "#a8dcff";
@@ -71,6 +72,7 @@ function OpeningMesh({
 
 export function WallMesh({ wallId }: { wallId: string }) {
   const wall = useHouseStore((s) => s.house.walls[wallId]);
+  const house = useHouseStore((s) => s.house);
   const openingMap = useHouseStore((s) => s.house.openings);
   const select = useEditorStore((s) => s.select);
   const isSelected = useEditorStore(
@@ -79,6 +81,12 @@ export function WallMesh({ wallId }: { wallId: string }) {
   const selectedOpeningId = useEditorStore(
     (s) => (s.selection?.kind === "opening" ? s.selection.id : null),
   );
+
+  const owner = useMemo(() => roomForWall(house, wallId), [house, wallId]);
+  const baseColor =
+    wall.color ??
+    (owner ? (house.rooms[owner.roomId]?.surfaces.wall ?? WALL_COLOR) : WALL_COLOR);
+  const wallColor = isSelected ? towardSelection(baseColor, 0.28) : baseColor;
 
   const openings = useMemo(
     () =>
@@ -107,6 +115,15 @@ export function WallMesh({ wallId }: { wallId: string }) {
         getOpeningFrameBoxes(wall, opening).map((box) => ({ opening, box })),
       ),
     [wall, openings],
+  );
+
+  const hasBaseboard = wall.baseboard !== undefined && wall.baseboard !== null;
+  const baseboardBoxes = useMemo(
+    () =>
+      hasBaseboard && wall.baseboard
+        ? getBaseboardBoxes(wall, openings, wall.baseboard.height)
+        : [],
+    [hasBaseboard, wall, openings],
   );
 
   const { onPointerDown, onPointerOver, onPointerOut } = useWallDrag(wallId);
@@ -144,11 +161,29 @@ export function WallMesh({ wallId }: { wallId: string }) {
         <mesh key={index} position={box.position} castShadow receiveShadow>
           <boxGeometry args={box.size} />
           <meshStandardMaterial
-            color={isSelected ? WALL_SELECTED : WALL_COLOR}
+            color={wallColor}
             roughness={0.85}
           />
         </mesh>
       ))}
+      {baseboardBoxes.map((box, index) => {
+        const boardColor = wall.baseboard
+          ? isSelected
+            ? towardSelection(wall.baseboard.color, 0.28)
+            : wall.baseboard.color
+          : WALL_COLOR;
+        return (
+          <mesh
+            key={`baseboard-${index}`}
+            position={box.position}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={box.size} />
+            <meshStandardMaterial color={boardColor} roughness={0.9} />
+          </mesh>
+        );
+      })}
       {frames.map(({ opening, box }, index) => (
         <OpeningMesh
           key={`frame-${opening.id}-${index}`}
